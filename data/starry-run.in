@@ -1,8 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# Start Starry on the console, replacing any running Weston session.
+# (Re)start Starry on the console, replacing any running Weston session.
 # Log: /run/starry.log
 [ -x /etc/init.d/lunar-weston ] && /etc/init.d/lunar-weston stop >/dev/null 2>&1
+if [ -x /etc/init.d/starry ]; then
+	exec /etc/init.d/starry restart
+fi
 killall starry-compositor 2>/dev/null && sleep 1
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/starry}
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"

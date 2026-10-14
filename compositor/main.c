@@ -95,7 +95,7 @@ static void home_hidden(struct starry_server *server) {
 	wlr_scene_node_set_enabled(&server->home_layer->node, false);
 }
 
-void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel) {
+void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel, bool slide) {
 	if (server->active == toplevel && !server->animation.active) {
 		return;
 	}
@@ -107,10 +107,16 @@ void starry_show_app(struct starry_server *server, struct starry_toplevel *tople
 	server->active = toplevel;
 	wlr_scene_node_set_enabled(&toplevel->tree->node, true);
 	wlr_scene_node_raise_to_top(&toplevel->tree->node);
-	wlr_scene_node_set_position(&toplevel->tree->node, 0, server->height);
 	set_keyboard_focus(server, toplevel);
 	system_scene_state(toplevel, true);
-	animate(server, &toplevel->tree->node, STARRY_STATUS_HEIGHT, 260, home_hidden);
+	if (slide) {
+		wlr_scene_node_set_position(&toplevel->tree->node, 0, server->height);
+		animate(server, &toplevel->tree->node, STARRY_STATUS_HEIGHT, 260, home_hidden);
+	} else {
+		server->animation.active = false;
+		wlr_scene_node_set_position(&toplevel->tree->node, 0, STARRY_STATUS_HEIGHT);
+		home_hidden(server);
+	}
 }
 
 static void app_hidden(struct starry_server *server) {
@@ -120,6 +126,22 @@ static void app_hidden(struct starry_server *server) {
 		wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, false);
 	}
 	server->active = NULL;
+}
+
+/* Hands the swipe over to the shell's app switcher. */
+static void enter_switcher(struct starry_server *server) {
+	int y = -1;
+	struct starry_toplevel *toplevel = server->active;
+	server->animation.active = false;
+	wlr_scene_node_set_enabled(&server->home_layer->node, true);
+	set_keyboard_focus(server, NULL);
+	if (toplevel) {
+		y = toplevel->tree->node.y;
+		system_scene_state(toplevel, false);
+		app_hidden(server);
+		wlr_scene_node_set_position(&toplevel->tree->node, 0, STARRY_STATUS_HEIGHT);
+	}
+	system_switcher(server, y);
 }
 
 void starry_go_home(struct starry_server *server, bool animated) {
@@ -143,6 +165,12 @@ static int handle_sigchld(int signal, void *data) {
 	return 0;
 }
 
+/* SIGUSR1 opens the switcher as if swiped, for testing without a finger. */
+static int handle_switcher_signal(int signal, void *data) {
+	enter_switcher(data);
+	return 0;
+}
+
 static int handle_terminate(int signal, void *data) {
 	wl_display_terminate(((struct starry_server *)data)->display);
 	return 0;
@@ -154,7 +182,7 @@ static void toplevel_map(struct wl_listener *listener, void *data) {
 	struct starry_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 	wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 	system_scene_added(toplevel);
-	starry_show_app(toplevel->server, toplevel);
+	starry_show_app(toplevel->server, toplevel, true);
 }
 
 static void toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -302,11 +330,12 @@ static void touch_down(struct wl_listener *listener, void *data) {
 	}
 	double x = event->x * server->width, y = event->y * server->height;
 	*point = (struct starry_touch){
-		.start_x = x, .start_y = y, .x = x, .y = y, .start_msec = event->time_msec,
+		.start_x = x, .start_y = y, .x = x, .y = y,
+		.start_msec = event->time_msec, .last_msec = event->time_msec,
 	};
 	bool locked = system_lock_mapped(server);
-	if (!locked && server->active && y >= server->height - STARRY_GESTURE_EDGE) {
-		point->role = STARRY_TOUCH_GESTURE;
+	if (!locked && y >= server->height - STARRY_GESTURE_EDGE) {
+		point->role = server->active ? STARRY_TOUCH_GESTURE : STARRY_TOUCH_HOME_GESTURE;
 		server->animation.active = false;
 		return;
 	}
@@ -329,8 +358,14 @@ static void touch_motion(struct wl_listener *listener, void *data) {
 	if (!point) {
 		return;
 	}
+	double y = event->y * server->height;
+	uint32_t elapsed = event->time_msec - point->last_msec;
+	if (elapsed > 0) {
+		point->velocity = 0.5 * point->velocity + 0.5 * (point->y - y) / elapsed;
+		point->last_msec = event->time_msec;
+	}
 	point->x = event->x * server->width;
-	point->y = event->y * server->height;
+	point->y = y;
 	if (point->role == STARRY_TOUCH_GESTURE && server->active) {
 		/* The app follows the finger upwards, showing home underneath. */
 		double lift = fmin(0, point->y - point->start_y);
@@ -354,12 +389,20 @@ static void touch_up(struct wl_listener *listener, void *data) {
 	if (point->role == STARRY_TOUCH_CLIENT) {
 		wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
 	} else if (point->role == STARRY_TOUCH_GESTURE && server->active) {
+		/* A flick goes home; a slow swipe that came to rest opens the switcher. */
 		double distance = point->start_y - point->y;
-		double velocity = distance / fmax(1, event->time_msec - point->start_msec);
-		if (distance > 90 || (distance > 24 && velocity > 0.5)) {
+		bool resting = point->velocity < 0.25 ||
+			event->time_msec - point->last_msec > 120;
+		if (distance > 110 && resting) {
+			enter_switcher(server);
+		} else if (distance > 40) {
 			starry_go_home(server, true);
 		} else {
 			animate(server, &server->active->tree->node, STARRY_STATUS_HEIGHT, 180, home_hidden);
+		}
+	} else if (point->role == STARRY_TOUCH_HOME_GESTURE) {
+		if (point->start_y - point->y > 60) {
+			enter_switcher(server);
 		}
 	}
 	point->role = STARRY_TOUCH_NONE;
@@ -578,6 +621,8 @@ int main(int argc, char *argv[]) {
 	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
 	server.home_layer = wlr_scene_tree_create(&server.scene->tree);
 	server.app_layer = wlr_scene_tree_create(&server.scene->tree);
+	server.switcher_layer = wlr_scene_tree_create(&server.scene->tree);
+	server.view_layer = wlr_scene_tree_create(&server.scene->tree);
 	server.overlay_layer = wlr_scene_tree_create(&server.scene->tree);
 	server.lock_layer = wlr_scene_tree_create(&server.scene->tree);
 
@@ -597,6 +642,7 @@ int main(int argc, char *argv[]) {
 	server.sigchld = wl_event_loop_add_signal(loop, SIGCHLD, handle_sigchld, &server);
 	server.sigterm = wl_event_loop_add_signal(loop, SIGTERM, handle_terminate, &server);
 	server.sigint = wl_event_loop_add_signal(loop, SIGINT, handle_terminate, &server);
+	wl_event_loop_add_signal(loop, SIGUSR1, handle_switcher_signal, &server);
 
 	const char *socket = wl_display_add_socket_auto(server.display);
 	if (!socket || !wlr_backend_start(server.backend)) {
@@ -608,6 +654,18 @@ int main(int argc, char *argv[]) {
 	wl_display_run(server.display);
 
 	wl_display_destroy_clients(server.display);
+	/* wlroots asserts that nothing still listens to the objects it destroys. */
+	wl_list_remove(&server.new_input.link);
+	wl_list_remove(&server.new_output.link);
+	wl_list_remove(&server.new_toplevel.link);
+	wl_list_remove(&server.new_popup.link);
+	if (server.touch_down.notify) {
+		wl_list_remove(&server.touch_down.link);
+		wl_list_remove(&server.touch_up.link);
+		wl_list_remove(&server.touch_motion.link);
+		wl_list_remove(&server.touch_cancel.link);
+		wl_list_remove(&server.touch_frame.link);
+	}
 	wlr_scene_node_destroy(&server.scene->tree.node);
 	wlr_allocator_destroy(server.allocator);
 	wlr_renderer_destroy(server.renderer);

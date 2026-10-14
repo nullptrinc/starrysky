@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <math.h>
+#include <stdint.h>
 #include <execinfo.h>
 #include <poll.h>
 #include <signal.h>
@@ -41,6 +43,40 @@ struct wl_surface *sb_surface_create(struct starboard *sb, bool input) {
 		wl_region_destroy(none);
 	}
 	return surface;
+}
+
+/* ---- sprites: input-less subsurfaces positioned in logical coordinates ---- */
+
+void sb_sprite_show(struct sb_sprite *sprite, struct canvas *canvas) {
+	wl_surface_attach(sprite->surface, canvas ? canvas->buffer : NULL, 0, 0);
+	if (canvas) {
+		canvas->busy = true;
+		wl_surface_damage_buffer(sprite->surface, 0, 0, INT32_MAX, INT32_MAX);
+	}
+	wl_surface_commit(sprite->surface);
+}
+
+void sb_sprite_init(struct starboard *sb, struct wl_surface *parent,
+		struct sb_sprite *sprite, struct canvas *canvas) {
+	sprite->surface = sb_surface_create(sb, false);
+	sprite->subsurface = wl_subcompositor_get_subsurface(sb->subcompositor,
+		sprite->surface, parent);
+	sb_sprite_show(sprite, canvas);
+}
+
+void sb_sprite_move(struct sb_sprite *sprite, double x, double y) {
+	sprite->x = x;
+	sprite->y = y;
+	wl_subsurface_set_position(sprite->subsurface, lround(x), lround(y));
+}
+
+void sb_sprite_destroy(struct sb_sprite *sprite) {
+	if (sprite->subsurface) {
+		wl_subsurface_destroy(sprite->subsurface);
+		wl_surface_destroy(sprite->surface);
+		sprite->subsurface = NULL;
+		sprite->surface = NULL;
+	}
 }
 
 /* ---- scenes: application windows reported by the compositor ---- */
@@ -111,12 +147,17 @@ static void scene_info(void *data, struct starry_scene_v1 *object, int32_t pid,
 static void scene_state(void *data, struct starry_scene_v1 *object, uint32_t state) {
 	struct sb_scene *scene = data;
 	scene->foreground = state == STARRY_SCENE_V1_STATE_FOREGROUND;
+	if (scene->foreground) {
+		scene->last_foreground = sb_now_msec();
+		switcher_hide(scene->sb);
+	}
 	status_update(scene->sb);
 }
 
 static void scene_closed(void *data, struct starry_scene_v1 *object) {
 	struct sb_scene *scene = data;
 	struct starboard *sb = scene->sb;
+	switcher_scene_closed(sb, scene);
 	wl_list_remove(&scene->link);
 	starry_scene_v1_destroy(object);
 	free(scene);
@@ -146,19 +187,33 @@ static void system_scene(void *data, struct starry_system_v1 *system,
 	starry_scene_v1_add_listener(object, &scene_listener, scene);
 }
 
+static void system_switcher(void *data, struct starry_system_v1 *system, int32_t y) {
+	switcher_show(data, y);
+}
+
 static const struct starry_system_v1_listener system_listener = {
 	.output = system_output,
 	.scene = system_scene,
+	.switcher = system_switcher,
 };
 
 /* ---- launching (the FrontBoard part): reuse a live scene, else start the app ---- */
+
+const char *sb_app_name_for_pid(struct starboard *sb, pid_t pid) {
+	for (int i = 0; i < sb->app_count; i++) {
+		if (pid && sb->apps[i].pid == pid) {
+			return sb->apps[i].name;
+		}
+	}
+	return NULL;
+}
 
 void sb_launch(struct starboard *sb, int index) {
 	struct sb_app *app = &sb->apps[index];
 	struct sb_scene *scene;
 	wl_list_for_each(scene, &sb->scenes, link) {
 		if (app->pid && scene->pid == app->pid) {
-			starry_scene_v1_activate(scene->scene);
+			starry_scene_v1_activate(scene->scene, STARRY_SCENE_V1_ANIMATION_SLIDE);
 			return;
 		}
 	}
@@ -209,12 +264,14 @@ static void touch_down(void *data, struct wl_touch *touch, uint32_t serial, uint
 	}
 	sb->touch_surface[id] = surface;
 	*point = (struct sb_touch){
-		.down = true, .app = -1,
+		.down = true, .app = -1, .last_msec = time,
 		.start_x = wl_fixed_to_double(x), .start_y = wl_fixed_to_double(y),
 		.x = wl_fixed_to_double(x), .y = wl_fixed_to_double(y),
 	};
 	if (surface == sb->home) {
 		home_touch_down(sb, point);
+	} else if (surface == sb->switcher) {
+		switcher_touch_down(sb, point);
 	}
 }
 
@@ -226,6 +283,8 @@ static void touch_up(void *data, struct wl_touch *touch, uint32_t serial, uint32
 		point->down = false;
 		if (sb->touch_surface[id] == sb->home) {
 			home_touch_up(sb, point);
+		} else if (sb->touch_surface[id] == sb->switcher) {
+			switcher_touch_up(sb, point, time);
 		}
 	}
 }
@@ -235,10 +294,19 @@ static void touch_motion(void *data, struct wl_touch *touch, uint32_t time, int3
 	struct starboard *sb = data;
 	struct sb_touch *point = touch_point(sb, id);
 	if (point && point->down) {
-		point->x = wl_fixed_to_double(x);
-		point->y = wl_fixed_to_double(y);
+		double nx = wl_fixed_to_double(x), ny = wl_fixed_to_double(y);
+		uint32_t elapsed = time - point->last_msec;
+		if (elapsed > 0) {
+			point->velocity_x = 0.5 * point->velocity_x + 0.5 * (nx - point->x) / elapsed;
+			point->velocity_y = 0.5 * point->velocity_y + 0.5 * (ny - point->y) / elapsed;
+			point->last_msec = time;
+		}
+		point->x = nx;
+		point->y = ny;
 		if (sb->touch_surface[id] == sb->home) {
 			home_touch_motion(sb, point);
+		} else if (sb->touch_surface[id] == sb->switcher) {
+			switcher_touch_motion(sb, point, time);
 		}
 	}
 }
@@ -255,6 +323,8 @@ static void touch_cancel(void *data, struct wl_touch *touch) {
 			point->app = -1; /* never a tap */
 			if (sb->touch_surface[id] == sb->home) {
 				home_touch_up(sb, point);
+			} else if (sb->touch_surface[id] == sb->switcher) {
+				switcher_touch_up(sb, point, 0);
 			}
 		}
 	}
@@ -383,6 +453,7 @@ int main(void) {
 	home_create(&sb);
 	status_load_plugins(&sb, env_or("STARRY_PLUGIN_DIR", STARRY_PLUGIN_DIR));
 	status_create(&sb);
+	switcher_create(&sb);
 	sb_log("Ready: %dx%d, %d apps, %d status items", sb.width, sb.height,
 		sb.app_count, sb.status_item_count);
 

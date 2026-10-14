@@ -19,6 +19,7 @@
       <entry name="home" value="0" summary="below applications: wallpaper and icons"/>
       <entry name="overlay" value="1" summary="above applications: status bar, indicators"/>
       <entry name="lock" value="2" summary="above everything; takes all input while mapped"/>
+      <entry name="switcher" value="3" summary="above applications, below scene views: app switcher backdrop"/>
     </enum>
 
     <enum name="error">
@@ -58,6 +59,16 @@
       </description>
       <arg name="id" type="new_id" interface="starry_scene_v1"/>
     </event>
+
+    <event name="switcher">
+      <description summary="the user asked for the app switcher">
+        Sent when a bottom-edge swipe ends in a hold. The foreground scene, if
+        any, has already been sent to the background and hidden; y is where
+        its top edge was, so the shell can continue the motion from there,
+        or -1 if the swipe started on the home screen.
+      </description>
+      <arg name="y" type="int"/>
+    </event>
   </interface>
 
   <interface name="starry_layer_surface_v1" version="1">
@@ -77,8 +88,23 @@
 
     <request name="destroy" type="destructor"/>
 
+    <enum name="animation">
+      <entry name="none" value="0" summary="show at once, e.g. after the shell animated a view"/>
+      <entry name="slide" value="1" summary="slide in from the bottom"/>
+    </enum>
+
     <request name="activate">
       <description summary="bring the application to the foreground"/>
+      <arg name="animation" type="uint" enum="animation"/>
+    </request>
+
+    <request name="get_view">
+      <description summary="host a snapshot of this scene">
+        The view shows a snapshot of the window taken now, scaled into the
+        geometry the shell sets, above the switcher layer. Views take no
+        input and outlive the scene, so a closing card can finish animating.
+      </description>
+      <arg name="id" type="new_id" interface="starry_scene_view_v1"/>
     </request>
 
     <request name="close">
@@ -98,5 +124,17 @@
     <event name="closed">
       <description summary="the window is gone; destroy this object"/>
     </event>
+  </interface>
+
+  <interface name="starry_scene_view_v1" version="1">
+    <request name="destroy" type="destructor"/>
+
+    <request name="set_geometry">
+      <description summary="place and scale the view, in logical coordinates"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
   </interface>
 </protocol>

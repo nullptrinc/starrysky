@@ -17,14 +17,16 @@ struct starry_server;
 enum starry_touch_role {
 	STARRY_TOUCH_NONE,
 	STARRY_TOUCH_CLIENT,
-	STARRY_TOUCH_GESTURE,
+	STARRY_TOUCH_GESTURE,      /* bottom edge over an app */
+	STARRY_TOUCH_HOME_GESTURE, /* bottom edge over the home screen */
 };
 
 struct starry_touch {
 	enum starry_touch_role role;
 	double start_x, start_y, x, y;
 	double surface_x, surface_y; /* layout position of the touched surface */
-	uint32_t start_msec;
+	uint32_t start_msec, last_msec;
+	double velocity; /* upwards, logical px per ms, smoothed */
 };
 
 struct starry_animation {
@@ -50,7 +52,8 @@ struct starry_server {
 	int width, height; /* logical */
 	bool screen_on;
 
-	struct wlr_scene_tree *home_layer, *app_layer, *overlay_layer, *lock_layer;
+	struct wlr_scene_tree *home_layer, *app_layer, *switcher_layer, *view_layer;
+	struct wlr_scene_tree *overlay_layer, *lock_layer;
 
 	struct wl_list toplevels;
 	struct starry_toplevel *active;
@@ -85,7 +88,7 @@ struct starry_toplevel {
 
 /* main.c */
 uint32_t starry_now_msec(void);
-void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel);
+void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel, bool slide);
 void starry_go_home(struct starry_server *server, bool animated);
 
 /* system.c */
@@ -97,5 +100,6 @@ void system_scene_info(struct starry_toplevel *toplevel);
 void system_scene_state(struct starry_toplevel *toplevel, bool foreground);
 void system_scene_removed(struct starry_toplevel *toplevel);
 bool system_lock_mapped(struct starry_server *server);
+void system_switcher(struct starry_server *server, int y);
 
 #endif

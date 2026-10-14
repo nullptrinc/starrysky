@@ -45,7 +45,7 @@ executable('starry-compositor',
   install: true)
 
 executable('starboard',
-  'starboard/main.c', 'starboard/home.c', 'starboard/status.c',
+  'starboard/main.c', 'starboard/home.c', 'starboard/status.c', 'starboard/switcher.c',
   'starboard/canvas.c', protocol_code, protocol_client,
   include_directories: plugin_include,
   dependencies: [
@@ -60,6 +60,12 @@ executable('starboard',
 configure_file(input: 'data/starry-run.in', output: 'starry-run',
   configuration: {'bindir': prefix / get_option('bindir')},
   install_dir: get_option('bindir'), install_mode: 'rwxr-xr-x')
+
+# sysvinit service; link it into /etc/init.d to start Starry at boot.
+configure_file(input: 'data/sysvinit/starry.in', output: 'starry.init',
+  configuration: {'bindir': prefix / get_option('bindir')},
+  install_dir: get_option('datadir') / 'starry' / 'sysvinit', install_mode: 'rwxr-xr-x',
+  install_tag: 'runtime')
 
 shared_module('wifi', 'plugins/wifi.c',
   name_prefix: '',

@@ -5,12 +5,22 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <drm_fourcc.h>
+#include <math.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/pass.h>
+#include <wlr/render/swapchain.h>
+#include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include "starry-system-v1-protocol.h"
 #include "starry.h"
 
+
+/* The one compositor instance, for objects that outlive their window. */
+static struct starry_server *system_server;
 
 struct starry_layer {
 	struct wl_list link;
@@ -88,6 +98,8 @@ static struct wlr_scene_tree *layer_parent(struct starry_server *server, uint32_
 		return server->overlay_layer;
 	case STARRY_SYSTEM_V1_LAYER_LOCK:
 		return server->lock_layer;
+	case STARRY_SYSTEM_V1_LAYER_SWITCHER:
+		return server->switcher_layer;
 	}
 	return NULL;
 }
@@ -154,6 +166,12 @@ static void system_resource_destroy(struct wl_resource *resource) {
 	}
 }
 
+void system_switcher(struct starry_server *server, int y) {
+	if (server->system) {
+		starry_system_v1_send_switcher(server->system, y);
+	}
+}
+
 void system_output_changed(struct starry_server *server) {
 	if (server->system && server->output) {
 		starry_system_v1_send_output(server->system, server->width, server->height, STARRY_SCALE);
@@ -186,11 +204,121 @@ static void scene_handle_destroy(struct wl_client *client, struct wl_resource *r
 	wl_resource_destroy(resource);
 }
 
-static void scene_handle_activate(struct wl_client *client, struct wl_resource *resource) {
+static void scene_handle_activate(struct wl_client *client, struct wl_resource *resource,
+		uint32_t animation) {
 	struct starry_toplevel *toplevel = wl_resource_get_user_data(resource);
 	if (toplevel) {
-		starry_show_app(toplevel->server, toplevel);
+		starry_show_app(toplevel->server, toplevel,
+			animation == STARRY_SCENE_V1_ANIMATION_SLIDE);
 	}
+}
+
+/* ---- scene views: snapshots the shell places, like CALayerHost on iOS ---- */
+
+struct snapshot_pass {
+	struct wlr_render_pass *pass;
+	double scale;
+};
+
+static void snapshot_surface(struct wlr_surface *surface, int sx, int sy, void *data) {
+	struct snapshot_pass *snapshot = data;
+	struct wlr_texture *texture = wlr_surface_get_texture(surface);
+	if (!texture) {
+		return;
+	}
+	wlr_render_pass_add_texture(snapshot->pass, &(struct wlr_render_texture_options){
+		.texture = texture,
+		.dst_box = {
+			.x = lround(sx * snapshot->scale), .y = lround(sy * snapshot->scale),
+			.width = lround(surface->current.width * snapshot->scale),
+			.height = lround(surface->current.height * snapshot->scale),
+		},
+		.filter_mode = WLR_SCALE_FILTER_BILINEAR,
+	});
+}
+
+/* Renders the window as it would appear full screen, at half the panel's density. */
+static struct wlr_buffer *snapshot_toplevel(struct starry_toplevel *toplevel) {
+	struct starry_server *server = toplevel->server;
+	const double scale = STARRY_SCALE / 2.0;
+	int width = lround(server->width * scale);
+	int height = lround((server->height - STARRY_STATUS_HEIGHT) * scale);
+	uint64_t implicit = DRM_FORMAT_MOD_INVALID;
+	struct wlr_drm_format fallback = {
+		.format = DRM_FORMAT_XRGB8888, .len = 1, .capacity = 1, .modifiers = &implicit,
+	};
+	struct wlr_buffer *buffer = NULL;
+	if (server->output && server->output->swapchain) {
+		buffer = wlr_allocator_create_buffer(server->allocator, width, height,
+			&server->output->swapchain->format);
+	}
+	if (!buffer) {
+		buffer = wlr_allocator_create_buffer(server->allocator, width, height, &fallback);
+	}
+	if (!buffer) {
+		return NULL;
+	}
+	struct wlr_render_pass *pass = wlr_renderer_begin_buffer_pass(server->renderer, buffer, NULL);
+	if (!pass) {
+		wlr_buffer_drop(buffer);
+		return NULL;
+	}
+	wlr_render_pass_add_rect(pass, &(struct wlr_render_rect_options){
+		.box = { .width = width, .height = height },
+		.color = { 0.08, 0.08, 0.1, 1 },
+	});
+	struct snapshot_pass snapshot = { .pass = pass, .scale = scale };
+	wlr_xdg_surface_for_each_surface(toplevel->xdg_toplevel->base, snapshot_surface, &snapshot);
+	wlr_render_pass_submit(pass);
+	return buffer;
+}
+
+struct starry_view {
+	struct wlr_scene_buffer *node;
+};
+
+static bool view_accepts_input(struct wlr_scene_buffer *buffer, double *sx, double *sy) {
+	return false; /* touches go to the switcher surface underneath */
+}
+
+static void view_handle_destroy(struct wl_client *client, struct wl_resource *resource) {
+	wl_resource_destroy(resource);
+}
+
+static void view_handle_set_geometry(struct wl_client *client, struct wl_resource *resource,
+		int32_t x, int32_t y, int32_t width, int32_t height) {
+	struct starry_view *view = wl_resource_get_user_data(resource);
+	wlr_scene_node_set_position(&view->node->node, x, y);
+	if (width > 0 && height > 0) {
+		wlr_scene_buffer_set_dest_size(view->node, width, height);
+	}
+}
+
+static const struct starry_scene_view_v1_interface view_impl = {
+	.destroy = view_handle_destroy,
+	.set_geometry = view_handle_set_geometry,
+};
+
+static void view_resource_destroy(struct wl_resource *resource) {
+	struct starry_view *view = wl_resource_get_user_data(resource);
+	wlr_scene_node_destroy(&view->node->node);
+	free(view);
+}
+
+static void scene_handle_get_view(struct wl_client *client, struct wl_resource *resource,
+		uint32_t id) {
+	struct starry_toplevel *toplevel = wl_resource_get_user_data(resource);
+	struct starry_view *view = calloc(1, sizeof(*view));
+	struct wl_resource *view_resource = wl_resource_create(client,
+		&starry_scene_view_v1_interface, wl_resource_get_version(resource), id);
+	/* A scene whose window is already gone still gets a (blank) view. */
+	struct wlr_buffer *buffer = toplevel ? snapshot_toplevel(toplevel) : NULL;
+	view->node = wlr_scene_buffer_create(system_server->view_layer, buffer);
+	if (buffer) {
+		wlr_buffer_drop(buffer);
+	}
+	view->node->point_accepts_input = view_accepts_input;
+	wl_resource_set_implementation(view_resource, &view_impl, view, view_resource_destroy);
 }
 
 static void scene_handle_close(struct wl_client *client, struct wl_resource *resource) {
@@ -203,6 +331,7 @@ static void scene_handle_close(struct wl_client *client, struct wl_resource *res
 static const struct starry_scene_v1_interface scene_impl = {
 	.destroy = scene_handle_destroy,
 	.activate = scene_handle_activate,
+	.get_view = scene_handle_get_view,
 	.close = scene_handle_close,
 };
 
@@ -313,6 +442,7 @@ void system_spawn_starboard(struct starry_server *server) {
 }
 
 void system_init(struct starry_server *server) {
+	system_server = server;
 	wl_list_init(&server->layers);
 	server->system_global = wl_global_create(server->display, &starry_system_v1_interface,
 		1, server, system_bind);

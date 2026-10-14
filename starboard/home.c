@@ -175,30 +175,6 @@ static bool in_done_button(struct starboard *sb, double x, double y) {
 		y < SB_STATUS_HEIGHT + 40;
 }
 
-/* ---- sprites: subsurfaces of the home surface, without input ---- */
-
-static void sprite_show(struct sb_sprite *sprite, struct canvas *canvas) {
-	wl_surface_attach(sprite->surface, canvas ? canvas->buffer : NULL, 0, 0);
-	if (canvas) {
-		canvas->busy = true;
-		wl_surface_damage_buffer(sprite->surface, 0, 0, INT32_MAX, INT32_MAX);
-	}
-	wl_surface_commit(sprite->surface);
-}
-
-static void sprite_init(struct starboard *sb, struct sb_sprite *sprite, struct canvas *canvas) {
-	sprite->surface = sb_surface_create(sb, false);
-	sprite->subsurface = wl_subcompositor_get_subsurface(sb->subcompositor,
-		sprite->surface, sb->home);
-	sprite_show(sprite, canvas);
-}
-
-static void sprite_move(struct sb_sprite *sprite, double x, double y) {
-	sprite->x = x;
-	sprite->y = y;
-	wl_subsurface_set_position(sprite->subsurface, lround(x), lround(y));
-}
-
 /* ---- drawing ---- */
 
 static void draw_app(struct starboard *sb, struct sb_app *app) {
@@ -224,13 +200,13 @@ static void draw_app(struct starboard *sb, struct sb_app *app) {
 
 static void place_app(struct sb_app *app, bool lifted) {
 	double offset = lifted ? -LIFT : 0;
-	sprite_move(&app->icon, app->x + offset, app->y + offset);
-	sprite_move(&app->label, app->x + (ICON - LABEL_WIDTH) / 2.0, app->y + ICON + 3);
+	sb_sprite_move(&app->icon, app->x + offset, app->y + offset);
+	sb_sprite_move(&app->label, app->x + (ICON - LABEL_WIDTH) / 2.0, app->y + ICON + 3);
 }
 
 static void set_lifted(struct starboard *sb, struct sb_app *app, bool lifted) {
-	sprite_show(&app->icon, lifted ? app->lifted_canvas : app->icon_canvas);
-	sprite_show(&app->label, lifted || app->dock ? NULL : app->label_canvas);
+	sb_sprite_show(&app->icon, lifted ? app->lifted_canvas : app->icon_canvas);
+	sb_sprite_show(&app->label, lifted || app->dock ? NULL : app->label_canvas);
 	if (lifted) {
 		wl_subsurface_place_above(app->icon.subsurface, sb->done.surface);
 	}
@@ -258,8 +234,8 @@ void home_create(struct starboard *sb) {
 	for (int i = 0; i < sb->app_count; i++) {
 		struct sb_app *app = &sb->apps[i];
 		draw_app(sb, app);
-		sprite_init(sb, &app->icon, app->icon_canvas);
-		sprite_init(sb, &app->label, app->dock ? NULL : app->label_canvas);
+		sb_sprite_init(sb, sb->home, &app->icon, app->icon_canvas);
+		sb_sprite_init(sb, sb->home, &app->label, app->dock ? NULL : app->label_canvas);
 		slot_position(sb, i, &app->x, &app->y);
 		place_app(app, false);
 	}
@@ -268,8 +244,8 @@ void home_create(struct starboard *sb) {
 	canvas_round_rect(sb->done_canvas, 0, 0, 64 * s, 28 * s, 14 * s, 0x59ffffff);
 	double width = canvas_text_width(true, 14 * s, "Done");
 	canvas_text(sb->done_canvas, true, 14 * s, 32 * s - width / 2, 19 * s, 0xffffffff, "Done");
-	sprite_init(sb, &sb->done, NULL);
-	sprite_move(&sb->done, w - 78, SB_STATUS_HEIGHT + 6);
+	sb_sprite_init(sb, sb->home, &sb->done, NULL);
+	sb_sprite_move(&sb->done, w - 78, SB_STATUS_HEIGHT + 6);
 
 	sb->dragging = -1;
 	sb->haptic_fd = -1;
@@ -392,7 +368,7 @@ static void haptic_tick(struct starboard *sb) {
 
 static void set_editing(struct starboard *sb, bool editing) {
 	sb->editing = editing;
-	sprite_show(&sb->done, editing ? sb->done_canvas : NULL);
+	sb_sprite_show(&sb->done, editing ? sb->done_canvas : NULL);
 	wl_surface_commit(sb->home);
 }
 

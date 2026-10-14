@@ -1,0 +1,50 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+### BEGIN INIT INFO
+# Provides:          starry
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Starry compositor and starboard shell
+### END INIT INFO
+
+compositor=@bindir@/starry-compositor
+pidfile=/run/starry.pid
+log=/run/starry.log
+export XDG_RUNTIME_DIR=/run/starry HOME=/home/root
+
+running() {
+	[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null
+}
+
+case "${1:-start}" in
+	start)
+		running && exit 0
+		mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+		seatd-launch -- "$compositor" >"$log" 2>&1 </dev/null &
+		echo $! > "$pidfile"
+		;;
+	stop)
+		# seatd-launch exits, and takes seatd down, once the compositor does.
+		# Also catches an instance started by hand, without our pidfile.
+		killall starry-compositor 2>/dev/null
+		for i in $(seq 15); do
+			pidof starry-compositor >/dev/null || break
+			sleep 0.2
+		done
+		killall -9 starry-compositor 2>/dev/null
+		rm -f "$pidfile"
+		;;
+	restart)
+		"$0" stop
+		exec "$0" start
+		;;
+	status)
+		running
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status}" >&2
+		exit 2
+		;;
+esac

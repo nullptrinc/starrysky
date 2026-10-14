@@ -107,9 +107,9 @@ void canvas_round_rect(struct canvas *canvas, double x, double y,
 	double hx = width / 2 - radius, hy = height / 2 - radius;
 	for (int py = y0; py < y1; py++) {
 		for (int px = x0; px < x1; px++) {
-			double dx = fmax(fabs(px + 0.5 - cx) - hx, 0);
-			double dy = fmax(fabs(py + 0.5 - cy) - hy, 0);
-			double coverage = fmin(1, fmax(0, radius - hypot(dx, dy) + 0.5));
+			double qx = fabs(px + 0.5 - cx) - hx, qy = fabs(py + 0.5 - cy) - hy;
+			double distance = hypot(fmax(qx, 0), fmax(qy, 0)) + fmin(fmax(qx, qy), 0) - radius;
+			double coverage = fmin(1, fmax(0, 0.5 - distance));
 			if (coverage > 0) {
 				blend(&canvas->pixels[py * canvas->width + px], premultiply(argb, coverage));
 			}

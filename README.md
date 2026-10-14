@@ -25,10 +25,14 @@ Working:
 - home grid and dock; long press to rearrange, drag between grid and dock,
   order saved in `/var/lib/starry/layout`; haptic tick on pick-up (evdev FF)
 - status bar with clock and plugin items; `wifi` plugin
+- app switcher: slow swipe up from the bottom edge (or a swipe up on the home
+  screen); cards scroll sideways, fling up to close, tap to open
+- starts at boot through a sysvinit service
 - starboard crash recovery ("respring") without losing apps
 
-Not yet: app switcher, lock screen, notifications, on-screen keyboard
-(text-input/input-method), scaled scene rendering for open/close animations.
+Not yet: lock screen, notifications, on-screen keyboard
+(text-input/input-method), rounded cards and live switcher previews, zoom
+from the icon when opening an app.
 
 ## Layout
 
@@ -66,6 +70,13 @@ On the device, as root on a free VT:
 ```
 
 The log goes to `/run/starry.log`.
+
+To start Starry at boot on a sysvinit system, link the bundled service and enable it:
+
+```sh
+ln -s /opt/starry/share/starry/sysvinit/starry.init /etc/init.d/starry
+update-rc.d starry defaults 99 20
+```
 
 The app catalogue lives in `<prefix>/etc/starry/apps`, one app per line
 (`Name|#RRGGBB|dock(0/1)|shell command`). Without it, a demo set of Weston clients is used.
