@@ -1,0 +1,9 @@
+#!/bin/sh
+# Start Starry on the console, replacing any running Weston session.
+# Log: /run/starry.log
+[ -x /etc/init.d/lunar-weston ] && /etc/init.d/lunar-weston stop >/dev/null 2>&1
+killall starry-compositor 2>/dev/null && sleep 1
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/starry}
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+export HOME=${HOME:-/home/root}
+nohup seatd-launch -- @bindir@/starry-compositor >/run/starry.log 2>&1 </dev/null &

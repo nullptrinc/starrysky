@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="starry_system_v1">
+  <copyright>
+    SPDX-License-Identifier: MIT
+  </copyright>
+
+  <description summary="system shell interface between starry-compositor and starry-springboard">
+    The compositor owns outputs, input and application windows. The system
+    shell (springboard) draws the home screen, status bar and other system UI
+    on its own surfaces and drives application scenes through this protocol,
+    in the way SpringBoard hosts application scenes through FrontBoard on iOS.
+
+    The global is only advertised to the springboard process started by the
+    compositor itself.
+  </description>
+
+  <interface name="starry_system_v1" version="1">
+    <enum name="layer">
+      <entry name="home" value="0" summary="below applications: wallpaper and icons"/>
+      <entry name="overlay" value="1" summary="above applications: status bar, indicators"/>
+      <entry name="lock" value="2" summary="above everything; takes all input while mapped"/>
+    </enum>
+
+    <enum name="error">
+      <entry name="role" value="0" summary="the surface already has a role"/>
+      <entry name="layer" value="1" summary="unknown layer"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="get_layer_surface">
+      <description summary="give a surface a system layer role">
+        The surface is shown on the given layer at position (0, 0) of the
+        output, in logical coordinates, once it has a buffer. Areas outside
+        the surface's input region pass touches to whatever lies below.
+      </description>
+      <arg name="id" type="new_id" interface="starry_layer_surface_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="layer" type="uint" enum="layer"/>
+    </request>
+
+    <request name="go_home">
+      <description summary="send the foreground application to the background"/>
+    </request>
+
+    <event name="output">
+      <description summary="logical size of the panel">
+        Sent on bind and whenever the size or scale changes.
+      </description>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="scale" type="int"/>
+    </event>
+
+    <event name="scene">
+      <description summary="an application window appeared">
+        Followed by the scene's info and state events.
+      </description>
+      <arg name="id" type="new_id" interface="starry_scene_v1"/>
+    </event>
+  </interface>
+
+  <interface name="starry_layer_surface_v1" version="1">
+    <request name="destroy" type="destructor"/>
+
+    <request name="set_position">
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+    </request>
+  </interface>
+
+  <interface name="starry_scene_v1" version="1">
+    <enum name="state">
+      <entry name="background" value="0"/>
+      <entry name="foreground" value="1"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="activate">
+      <description summary="bring the application to the foreground"/>
+    </request>
+
+    <request name="close">
+      <description summary="ask the application to close its window"/>
+    </request>
+
+    <event name="info">
+      <arg name="pid" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="state">
+      <arg name="state" type="uint" enum="state"/>
+    </event>
+
+    <event name="closed">
+      <description summary="the window is gone; destroy this object"/>
+    </event>
+  </interface>
+</protocol>
