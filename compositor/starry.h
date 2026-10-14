@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #ifndef STARRY_H
 #define STARRY_H
 
@@ -58,12 +59,12 @@ struct starry_server {
 
 	/* System shell (system.c) */
 	struct wl_global *system_global;
-	struct wl_client *springboard;
+	struct wl_client *starboard;
 	struct wl_resource *system;
-	struct wl_listener springboard_destroy;
+	struct wl_listener starboard_destroy;
 	struct wl_event_source *respawn;
-	uint32_t springboard_started_msec;
-	int springboard_failures;
+	uint32_t starboard_started_msec;
+	int starboard_failures;
 	struct wl_list layers;
 
 	struct wl_event_source *sigchld, *sigterm, *sigint;
@@ -76,7 +77,7 @@ struct starry_toplevel {
 	struct starry_server *server;
 	struct wlr_xdg_toplevel *xdg_toplevel;
 	struct wlr_scene_tree *tree;
-	struct wl_resource *scene; /* starry_scene_v1 held by springboard */
+	struct wl_resource *scene; /* starry_scene_v1 held by starboard */
 	pid_t pid;
 	struct wl_listener map, unmap, commit, destroy, set_title;
 	struct wl_listener request_maximize, request_fullscreen;
@@ -89,7 +90,7 @@ void starry_go_home(struct starry_server *server, bool animated);
 
 /* system.c */
 void system_init(struct starry_server *server);
-void system_spawn_springboard(struct starry_server *server);
+void system_spawn_starboard(struct starry_server *server);
 void system_output_changed(struct starry_server *server);
 void system_scene_added(struct starry_toplevel *toplevel);
 void system_scene_info(struct starry_toplevel *toplevel);

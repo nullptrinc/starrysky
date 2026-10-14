@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #ifndef STARRY_CANVAS_H
 #define STARRY_CANVAS_H
 

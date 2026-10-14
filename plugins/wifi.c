@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Status bar item: whether wlan0 has a link. */
 #include <stdio.h>
 #include <string.h>

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -7,7 +8,7 @@
 #include <unistd.h>
 #include <wayland-client.h>
 #include "canvas.h"
-#include "springboard.h"
+#include "starboard.h"
 
 static FT_Library library;
 static FT_Face faces[2];

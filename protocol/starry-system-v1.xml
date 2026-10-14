@@ -4,13 +4,13 @@
     SPDX-License-Identifier: MIT
   </copyright>
 
-  <description summary="system shell interface between starry-compositor and starry-springboard">
+  <description summary="system shell interface between starry-compositor and starboard">
     The compositor owns outputs, input and application windows. The system
-    shell (springboard) draws the home screen, status bar and other system UI
+    shell (starboard) draws the home screen, status bar and other system UI
     on its own surfaces and drives application scenes through this protocol,
     in the way SpringBoard hosts application scenes through FrontBoard on iOS.
 
-    The global is only advertised to the springboard process started by the
+    The global is only advertised to the starboard process started by the
     compositor itself.
   </description>
 

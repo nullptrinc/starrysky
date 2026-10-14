@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #include <dirent.h>
 #include <dlfcn.h>
 #include <stdarg.h>
@@ -9,7 +10,7 @@
 #include <time.h>
 #include "canvas.h"
 #include "starry-system-v1-client-protocol.h"
-#include "springboard.h"
+#include "starboard.h"
 
 #define INDICATOR_WIDTH 134
 #define INDICATOR_HEIGHT 5
@@ -21,7 +22,7 @@
 /* ---- plugin host ---- */
 
 static bool host_add_status_item(struct starry_host *host, const struct starry_status_item *item) {
-	struct springboard *sb = (struct springboard *)host;
+	struct starboard *sb = (struct starboard *)host;
 	if (sb->status_item_count >= SB_MAX_STATUS_ITEMS || !item->text ||
 			item->size < offsetof(struct starry_status_item, data) + sizeof(item->data)) {
 		return false;
@@ -33,7 +34,7 @@ static bool host_add_status_item(struct starry_host *host, const struct starry_s
 }
 
 static void host_refresh_status(struct starry_host *host) {
-	struct springboard *sb = (struct springboard *)host;
+	struct starboard *sb = (struct starboard *)host;
 	for (int i = 0; i < sb->status_item_count; i++) {
 		sb->status_items[i].next_poll = 0;
 	}
@@ -43,7 +44,7 @@ static void host_refresh_status(struct starry_host *host) {
 static void host_log(struct starry_host *host, const char *format, ...) {
 	va_list args;
 	va_start(args, format);
-	fprintf(stderr, "springboard plugin: ");
+	fprintf(stderr, "starboard plugin: ");
 	vfprintf(stderr, format, args);
 	fputc('\n', stderr);
 	va_end(args);
@@ -61,7 +62,7 @@ static int plugin_filter(const struct dirent *entry) {
 	return length > 3 && strcmp(entry->d_name + length - 3, ".so") == 0;
 }
 
-void status_load_plugins(struct springboard *sb, const char *directory) {
+void status_load_plugins(struct starboard *sb, const char *directory) {
 	struct dirent **entries;
 	int count = scandir(directory, &entries, plugin_filter, alphasort);
 	for (int i = 0; i < count; i++) {
@@ -90,12 +91,12 @@ void status_load_plugins(struct springboard *sb, const char *directory) {
 
 /* ---- status bar and home indicator ---- */
 
-static void status_tick(struct springboard *sb) {
+static void status_tick(struct starboard *sb) {
 	status_update(sb);
 	sb_timer_arm(&sb->status_tick, 1000);
 }
 
-void status_create(struct springboard *sb) {
+void status_create(struct starboard *sb) {
 	sb->status = sb_surface_create(sb, true);
 	sb->status_layer = starry_system_v1_get_layer_surface(sb->system, sb->status,
 		STARRY_SYSTEM_V1_LAYER_OVERLAY);
@@ -115,7 +116,7 @@ void status_create(struct springboard *sb) {
 	sb_timer_arm(&sb->status_tick, 1000);
 }
 
-static void show_indicator(struct springboard *sb, bool shown) {
+static void show_indicator(struct starboard *sb, bool shown) {
 	if (sb->indicator_shown == shown) {
 		return;
 	}
@@ -129,7 +130,7 @@ static void show_indicator(struct springboard *sb, bool shown) {
 }
 
 /* Polls due items and redraws only when something visible changed. */
-void status_update(struct springboard *sb) {
+void status_update(struct starboard *sb) {
 	if (!sb->status) {
 		return;
 	}

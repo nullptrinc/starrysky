@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <execinfo.h>
@@ -11,12 +12,12 @@
 #include <unistd.h>
 #include "canvas.h"
 #include "starry-system-v1-client-protocol.h"
-#include "springboard.h"
+#include "starboard.h"
 
 static void crash_handler(int signal) {
 	void *frames[64];
 	int count = backtrace(frames, 64);
-	dprintf(STDERR_FILENO, "starry-springboard: fatal signal %d\n", signal);
+	dprintf(STDERR_FILENO, "starboard: fatal signal %d\n", signal);
 	backtrace_symbols_fd(frames, count, STDERR_FILENO);
 	_exit(128 + signal);
 }
@@ -31,7 +32,7 @@ void sb_timer_arm(struct sb_timer *timer, uint32_t delay_msec) {
 	timer->deadline = delay_msec ? sb_now_msec() + delay_msec : 0;
 }
 
-struct wl_surface *sb_surface_create(struct springboard *sb, bool input) {
+struct wl_surface *sb_surface_create(struct starboard *sb, bool input) {
 	struct wl_surface *surface = wl_compositor_create_surface(sb->compositor);
 	wl_surface_set_buffer_scale(surface, SB_SCALE);
 	if (!input) {
@@ -44,7 +45,7 @@ struct wl_surface *sb_surface_create(struct springboard *sb, bool input) {
 
 /* ---- scenes: application windows reported by the compositor ---- */
 
-struct sb_scene *sb_foreground_scene(struct springboard *sb) {
+struct sb_scene *sb_foreground_scene(struct starboard *sb) {
 	struct sb_scene *scene;
 	wl_list_for_each(scene, &sb->scenes, link) {
 		if (scene->foreground) {
@@ -68,9 +69,9 @@ static void command_program(const char *command, char *program, size_t size) {
 	snprintf(program, size, "%.*s", (int)length, command);
 }
 
-/* After a springboard restart the windows already open belong to nobody;
+/* After a starboard restart the windows already open belong to nobody;
  * recognise them by the program running in the window's process. */
-static void adopt_scene(struct springboard *sb, struct sb_scene *scene) {
+static void adopt_scene(struct starboard *sb, struct sb_scene *scene) {
 	char path[64], argv0[256] = "";
 	snprintf(path, sizeof(path), "/proc/%d/cmdline", scene->pid);
 	FILE *file = fopen(path, "r");
@@ -115,7 +116,7 @@ static void scene_state(void *data, struct starry_scene_v1 *object, uint32_t sta
 
 static void scene_closed(void *data, struct starry_scene_v1 *object) {
 	struct sb_scene *scene = data;
-	struct springboard *sb = scene->sb;
+	struct starboard *sb = scene->sb;
 	wl_list_remove(&scene->link);
 	starry_scene_v1_destroy(object);
 	free(scene);
@@ -130,14 +131,14 @@ static const struct starry_scene_v1_listener scene_listener = {
 
 static void system_output(void *data, struct starry_system_v1 *system,
 		int32_t width, int32_t height, int32_t scale) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	sb->width = width;
 	sb->height = height;
 }
 
 static void system_scene(void *data, struct starry_system_v1 *system,
 		struct starry_scene_v1 *object) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	struct sb_scene *scene = calloc(1, sizeof(*scene));
 	scene->sb = sb;
 	scene->scene = object;
@@ -152,7 +153,7 @@ static const struct starry_system_v1_listener system_listener = {
 
 /* ---- launching (the FrontBoard part): reuse a live scene, else start the app ---- */
 
-void sb_launch(struct springboard *sb, int index) {
+void sb_launch(struct starboard *sb, int index) {
 	struct sb_app *app = &sb->apps[index];
 	struct sb_scene *scene;
 	wl_list_for_each(scene, &sb->scenes, link) {
@@ -179,7 +180,7 @@ void sb_launch(struct springboard *sb, int index) {
 	}
 }
 
-static void reap_children(struct springboard *sb, int fd) {
+static void reap_children(struct starboard *sb, int fd) {
 	struct signalfd_siginfo info;
 	while (read(fd, &info, sizeof(info)) == sizeof(info)) {
 	}
@@ -195,13 +196,13 @@ static void reap_children(struct springboard *sb, int fd) {
 
 /* ---- touch: only the home surface takes input ---- */
 
-static struct sb_touch *touch_point(struct springboard *sb, int32_t id) {
+static struct sb_touch *touch_point(struct starboard *sb, int32_t id) {
 	return id >= 0 && id < SB_MAX_TOUCH ? &sb->touches[id] : NULL;
 }
 
 static void touch_down(void *data, struct wl_touch *touch, uint32_t serial, uint32_t time,
 		struct wl_surface *surface, int32_t id, wl_fixed_t x, wl_fixed_t y) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	struct sb_touch *point = touch_point(sb, id);
 	if (!point) {
 		return;
@@ -219,7 +220,7 @@ static void touch_down(void *data, struct wl_touch *touch, uint32_t serial, uint
 
 static void touch_up(void *data, struct wl_touch *touch, uint32_t serial, uint32_t time,
 		int32_t id) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	struct sb_touch *point = touch_point(sb, id);
 	if (point && point->down) {
 		point->down = false;
@@ -231,7 +232,7 @@ static void touch_up(void *data, struct wl_touch *touch, uint32_t serial, uint32
 
 static void touch_motion(void *data, struct wl_touch *touch, uint32_t time, int32_t id,
 		wl_fixed_t x, wl_fixed_t y) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	struct sb_touch *point = touch_point(sb, id);
 	if (point && point->down) {
 		point->x = wl_fixed_to_double(x);
@@ -246,7 +247,7 @@ static void touch_frame(void *data, struct wl_touch *touch) {
 }
 
 static void touch_cancel(void *data, struct wl_touch *touch) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	for (int id = 0; id < SB_MAX_TOUCH; id++) {
 		struct sb_touch *point = &sb->touches[id];
 		if (point->down) {
@@ -268,7 +269,7 @@ static const struct wl_touch_listener touch_listener = {
 };
 
 static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t capabilities) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) && !sb->touch) {
 		sb->touch = wl_seat_get_touch(seat);
 		wl_touch_add_listener(sb->touch, &touch_listener, sb);
@@ -287,7 +288,7 @@ static const struct wl_seat_listener seat_listener = {
 
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name,
 		const char *interface, uint32_t version) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	if (strcmp(interface, wl_compositor_interface.name) == 0) {
 		sb->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
 	} else if (strcmp(interface, wl_subcompositor_interface.name) == 0) {
@@ -316,7 +317,7 @@ static const char *env_or(const char *name, const char *fallback) {
 	return value && *value ? value : fallback;
 }
 
-static int next_timeout(struct springboard *sb) {
+static int next_timeout(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick };
 	uint32_t now = sb_now_msec();
 	int timeout = -1;
@@ -330,7 +331,7 @@ static int next_timeout(struct springboard *sb) {
 	return timeout;
 }
 
-static void run_timers(struct springboard *sb) {
+static void run_timers(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick };
 	uint32_t now = sb_now_msec();
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
@@ -345,7 +346,7 @@ int main(void) {
 	signal(SIGSEGV, crash_handler);
 	signal(SIGABRT, crash_handler);
 	signal(SIGBUS, crash_handler);
-	struct springboard sb = { .running = true };
+	struct starboard sb = { .running = true };
 	wl_list_init(&sb.scenes);
 
 	sb.display = wl_display_connect(NULL);
@@ -359,7 +360,7 @@ int main(void) {
 	wl_display_roundtrip(sb.display);
 	wl_display_roundtrip(sb.display);
 	if (!sb.compositor || !sb.subcompositor || !sb.shm || !sb.system || !sb.width) {
-		sb_log("Missing globals; was springboard started by starry-compositor?");
+		sb_log("Missing globals; was starboard started by starry-compositor?");
 		return 1;
 	}
 	if (!canvas_font_init("/usr/share/fonts/ttf/LiberationSans-Regular.ttf",

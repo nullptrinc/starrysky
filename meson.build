@@ -1,4 +1,5 @@
 project('starry', 'c',
+  license: 'MIT',
   version: '0.2',
   default_options: ['c_std=gnu11', 'warning_level=2', 'buildtype=release'])
 
@@ -8,7 +9,7 @@ add_project_arguments('-DWLR_USE_UNSTABLE', '-Wno-unused-parameter',
 prefix = get_option('prefix')
 plugin_dir = get_option('libdir') / 'starry' / 'plugins'
 add_project_arguments(
-  '-DSTARRY_SPRINGBOARD_PATH="@0@"'.format(prefix / get_option('bindir') / 'starry-springboard'),
+  '-DSTARRY_STARBOARD_PATH="@0@"'.format(prefix / get_option('bindir') / 'starboard'),
   '-DSTARRY_PLUGIN_DIR="@0@"'.format(prefix / plugin_dir),
   '-DSTARRY_APPS_PATH="@0@"'.format(prefix / get_option('sysconfdir') / 'starry' / 'apps'),
   language: 'c')
@@ -43,9 +44,9 @@ executable('starry-compositor',
   install_rpath: rpath,
   install: true)
 
-executable('starry-springboard',
-  'springboard/main.c', 'springboard/home.c', 'springboard/status.c',
-  'springboard/canvas.c', protocol_code, protocol_client,
+executable('starboard',
+  'starboard/main.c', 'starboard/home.c', 'starboard/status.c',
+  'starboard/canvas.c', protocol_code, protocol_client,
   include_directories: plugin_include,
   dependencies: [
     dependency('wayland-client'),

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <execinfo.h>
 #include <linux/input-event-codes.h>
@@ -135,7 +136,7 @@ void starry_go_home(struct starry_server *server, bool animated) {
 	}
 }
 
-/* Applications started by a springboard that later died are reparented to us. */
+/* Applications started by a starboard that later died are reparented to us. */
 static int handle_sigchld(int signal, void *data) {
 	while (waitpid(-1, NULL, WNOHANG) > 0) {
 	}
@@ -603,7 +604,7 @@ int main(int argc, char *argv[]) {
 	}
 	setenv("WAYLAND_DISPLAY", socket, true);
 	wlr_log(WLR_INFO, "Starry running on WAYLAND_DISPLAY=%s", socket);
-	system_spawn_springboard(&server);
+	system_spawn_starboard(&server);
 	wl_display_run(server.display);
 
 	wl_display_destroy_clients(server.display);

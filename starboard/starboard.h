@@ -1,5 +1,6 @@
-#ifndef STARRY_SPRINGBOARD_H
-#define STARRY_SPRINGBOARD_H
+/* SPDX-License-Identifier: MIT */
+#ifndef STARRY_STARBOARD_H
+#define STARRY_STARBOARD_H
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -7,7 +8,7 @@
 #include <wayland-client.h>
 #include "starry-plugin.h"
 
-#define sb_log(format, ...) fprintf(stderr, "springboard: " format "\n", ##__VA_ARGS__)
+#define sb_log(format, ...) fprintf(stderr, "starboard: " format "\n", ##__VA_ARGS__)
 
 #define SB_SCALE 3
 #define SB_STATUS_HEIGHT 28
@@ -37,7 +38,7 @@ struct sb_app {
 
 struct sb_scene {
 	struct wl_list link;
-	struct springboard *sb;
+	struct starboard *sb;
 	struct starry_scene_v1 *scene;
 	pid_t pid;
 	char app_id[64];
@@ -52,7 +53,7 @@ struct sb_touch {
 
 struct sb_timer {
 	uint32_t deadline; /* 0 = disarmed */
-	void (*callback)(struct springboard *sb);
+	void (*callback)(struct starboard *sb);
 };
 
 struct sb_status_item {
@@ -61,7 +62,7 @@ struct sb_status_item {
 	uint32_t next_poll;
 };
 
-struct springboard {
+struct starboard {
 	struct wl_display *display;
 	struct wl_compositor *compositor;
 	struct wl_subcompositor *subcompositor;
@@ -110,21 +111,21 @@ struct springboard {
 
 /* main.c */
 uint32_t sb_now_msec(void);
-struct wl_surface *sb_surface_create(struct springboard *sb, bool input);
+struct wl_surface *sb_surface_create(struct starboard *sb, bool input);
 void sb_timer_arm(struct sb_timer *timer, uint32_t delay_msec);
-struct sb_scene *sb_foreground_scene(struct springboard *sb);
-void sb_launch(struct springboard *sb, int index);
+struct sb_scene *sb_foreground_scene(struct starboard *sb);
+void sb_launch(struct starboard *sb, int index);
 
 /* home.c */
-void home_load_apps(struct springboard *sb, const char *catalog, const char *layout);
-void home_create(struct springboard *sb);
-void home_touch_down(struct springboard *sb, struct sb_touch *point);
-void home_touch_motion(struct springboard *sb, struct sb_touch *point);
-void home_touch_up(struct springboard *sb, struct sb_touch *point);
+void home_load_apps(struct starboard *sb, const char *catalog, const char *layout);
+void home_create(struct starboard *sb);
+void home_touch_down(struct starboard *sb, struct sb_touch *point);
+void home_touch_motion(struct starboard *sb, struct sb_touch *point);
+void home_touch_up(struct starboard *sb, struct sb_touch *point);
 
 /* status.c */
-void status_create(struct springboard *sb);
-void status_update(struct springboard *sb);
-void status_load_plugins(struct springboard *sb, const char *directory);
+void status_create(struct starboard *sb);
+void status_update(struct starboard *sb);
+void status_load_plugins(struct starboard *sb, const char *directory);
 
 #endif

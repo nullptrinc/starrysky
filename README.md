@@ -5,13 +5,13 @@ A phone shell for Linux, split the way iOS splits backboardd and SpringBoard.
 - **starry-compositor**: a Wayland compositor built on wlroots. It owns the panel,
   input, the bottom-edge home gesture and application windows ("scenes"). It draws
   no UI of its own.
-- **starry-springboard**: the system shell. A separate, privileged Wayland client
+- **starboard**: the system shell. A separate, privileged Wayland client
   that draws the home screen, dock, status bar and home indicator, launches apps,
   and drives scenes through the private `starry-system-v1` protocol. The compositor
   starts it on a private socket and restarts it when it dies. Open applications
-  survive the restart and are adopted again by the new springboard.
-- **Plugins**: shared objects loaded by springboard through a stable C ABI
-  (`include/starry-plugin.h`). They run in the springboard process only, so a
+  survive the restart and are adopted again by the new starboard.
+- **Plugins**: shared objects loaded by starboard through a stable C ABI
+  (`include/starry-plugin.h`). They run in the starboard process only, so a
   faulty plugin can never take down the compositor or running apps.
 
 Developed on a Xiaomi Mi 11 Lite 4G (courbet, 1080x2400, Adreno 618).
@@ -25,7 +25,7 @@ Working:
 - home grid and dock; long press to rearrange, drag between grid and dock,
   order saved in `/var/lib/starry/layout`; haptic tick on pick-up (evdev FF)
 - status bar with clock and plugin items; `wifi` plugin
-- springboard crash recovery ("respring") without losing apps
+- starboard crash recovery ("respring") without losing apps
 
 Not yet: app switcher, lock screen, notifications, on-screen keyboard
 (text-input/input-method), scaled scene rendering for open/close animations.
@@ -34,9 +34,9 @@ Not yet: app switcher, lock screen, notifications, on-screen keyboard
 
 | Path | |
 |---|---|
-| `compositor/` | wlroots compositor; `system.c` implements `starry-system-v1` and supervises springboard |
-| `springboard/` | system shell client; `home.c` grid/dock, `status.c` status bar and plugin host |
-| `protocol/starry-system-v1.xml` | compositor ↔ springboard protocol: layers, scenes, go home |
+| `compositor/` | wlroots compositor; `system.c` implements `starry-system-v1` and supervises starboard |
+| `starboard/` | system shell client; `home.c` grid/dock, `status.c` status bar and plugin host |
+| `protocol/starry-system-v1.xml` | compositor ↔ starboard protocol: layers, scenes, go home |
 | `include/starry-plugin.h` | plugin ABI |
 | `plugins/` | bundled plugins |
 | `data/starry-run.in` | starts the compositor through `seatd-launch` |
@@ -70,7 +70,7 @@ The log goes to `/run/starry.log`.
 The app catalogue lives in `<prefix>/etc/starry/apps`, one app per line
 (`Name|#RRGGBB|dock(0/1)|shell command`). Without it, a demo set of Weston clients is used.
 
-Environment overrides: `STARRY_SPRINGBOARD` (springboard binary), `STARRY_APPS`,
+Environment overrides: `STARRY_STARBOARD` (starboard binary), `STARRY_APPS`,
 `STARRY_PLUGIN_DIR`, `STARRY_DEBUG` (verbose wlroots log).
 
 ## Writing a plugin
@@ -97,3 +97,7 @@ const struct starry_plugin starry_plugin = {
 ```
 
 Build it as a shared object and drop it into `<prefix>/lib/starry/plugins/`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

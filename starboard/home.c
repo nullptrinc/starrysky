@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -10,7 +11,7 @@
 #include <unistd.h>
 #include "canvas.h"
 #include "starry-system-v1-client-protocol.h"
-#include "springboard.h"
+#include "starboard.h"
 
 #define ICON 60
 #define LIFT 6 /* extra size per side while an icon is held */
@@ -39,7 +40,7 @@ static const struct sb_app default_apps[] = {
 
 static const char *layout_path = LAYOUT_DIR "/layout";
 
-static int dock_count(struct springboard *sb) {
+static int dock_count(struct starboard *sb) {
 	int count = 0;
 	for (int i = 0; i < sb->app_count; i++) {
 		count += sb->apps[i].dock;
@@ -47,7 +48,7 @@ static int dock_count(struct springboard *sb) {
 	return count;
 }
 
-/* ---- catalogue and saved order (the IconState of this springboard) ---- */
+/* ---- catalogue and saved order (the IconState of this starboard) ---- */
 
 static int find_app(struct sb_app *apps, int count, const char *name) {
 	for (int i = 0; i < count; i++) {
@@ -60,7 +61,7 @@ static int find_app(struct sb_app *apps, int count, const char *name) {
 
 /* Catalogue: one app per line, Name|#RRGGBB|dock(0/1)|shell command.
  * Layout: "dock Name" or "grid Name" per line, in display order. */
-void home_load_apps(struct springboard *sb, const char *catalog, const char *layout) {
+void home_load_apps(struct starboard *sb, const char *catalog, const char *layout) {
 	struct sb_app apps[SB_MAX_APPS];
 	int count = 0;
 	FILE *file = fopen(catalog, "r");
@@ -114,7 +115,7 @@ void home_load_apps(struct springboard *sb, const char *catalog, const char *lay
 	}
 }
 
-static void save_layout(struct springboard *sb) {
+static void save_layout(struct starboard *sb) {
 	mkdir(LAYOUT_DIR, 0755);
 	char temporary[64];
 	snprintf(temporary, sizeof(temporary), "%s.new", layout_path);
@@ -134,7 +135,7 @@ static void save_layout(struct springboard *sb) {
 
 /* ---- geometry ---- */
 
-static int group_position(struct springboard *sb, int index) {
+static int group_position(struct starboard *sb, int index) {
 	int position = 0;
 	for (int i = 0; i < index; i++) {
 		position += sb->apps[i].dock == sb->apps[index].dock;
@@ -143,7 +144,7 @@ static int group_position(struct springboard *sb, int index) {
 }
 
 /* Top-left corner of an app's icon slot in logical coordinates. */
-static void slot_position(struct springboard *sb, int index, double *x, double *y) {
+static void slot_position(struct starboard *sb, int index, double *x, double *y) {
 	int position = group_position(sb, index);
 	if (sb->apps[index].dock) {
 		int count = dock_count(sb);
@@ -158,7 +159,7 @@ static void slot_position(struct springboard *sb, int index, double *x, double *
 	}
 }
 
-static int app_at(struct springboard *sb, double x, double y) {
+static int app_at(struct starboard *sb, double x, double y) {
 	for (int i = 0; i < sb->app_count; i++) {
 		double ix, iy;
 		slot_position(sb, i, &ix, &iy);
@@ -169,7 +170,7 @@ static int app_at(struct springboard *sb, double x, double y) {
 	return -1;
 }
 
-static bool in_done_button(struct springboard *sb, double x, double y) {
+static bool in_done_button(struct starboard *sb, double x, double y) {
 	return sb->editing && x >= sb->width - 90 && y >= SB_STATUS_HEIGHT &&
 		y < SB_STATUS_HEIGHT + 40;
 }
@@ -185,7 +186,7 @@ static void sprite_show(struct sb_sprite *sprite, struct canvas *canvas) {
 	wl_surface_commit(sprite->surface);
 }
 
-static void sprite_init(struct springboard *sb, struct sb_sprite *sprite, struct canvas *canvas) {
+static void sprite_init(struct starboard *sb, struct sb_sprite *sprite, struct canvas *canvas) {
 	sprite->surface = sb_surface_create(sb, false);
 	sprite->subsurface = wl_subcompositor_get_subsurface(sb->subcompositor,
 		sprite->surface, sb->home);
@@ -200,7 +201,7 @@ static void sprite_move(struct sb_sprite *sprite, double x, double y) {
 
 /* ---- drawing ---- */
 
-static void draw_app(struct springboard *sb, struct sb_app *app) {
+static void draw_app(struct starboard *sb, struct sb_app *app) {
 	const double s = SB_SCALE;
 	for (int lifted = 0; lifted < 2; lifted++) {
 		double size = (ICON + (lifted ? 2 * LIFT : 0)) * s;
@@ -227,7 +228,7 @@ static void place_app(struct sb_app *app, bool lifted) {
 	sprite_move(&app->label, app->x + (ICON - LABEL_WIDTH) / 2.0, app->y + ICON + 3);
 }
 
-static void set_lifted(struct springboard *sb, struct sb_app *app, bool lifted) {
+static void set_lifted(struct starboard *sb, struct sb_app *app, bool lifted) {
 	sprite_show(&app->icon, lifted ? app->lifted_canvas : app->icon_canvas);
 	sprite_show(&app->label, lifted || app->dock ? NULL : app->label_canvas);
 	if (lifted) {
@@ -236,9 +237,9 @@ static void set_lifted(struct springboard *sb, struct sb_app *app, bool lifted) 
 	place_app(app, lifted);
 }
 
-static void long_press(struct springboard *sb);
+static void long_press(struct starboard *sb);
 
-void home_create(struct springboard *sb) {
+void home_create(struct starboard *sb) {
 	const int s = SB_SCALE, w = sb->width, h = sb->height;
 	sb->long_press.callback = long_press;
 	sb->home = sb_surface_create(sb, true);
@@ -279,9 +280,9 @@ void home_create(struct springboard *sb) {
 
 /* ---- motion: icons ease towards their slots on frame callbacks ---- */
 
-static void home_schedule(struct springboard *sb);
+static void home_schedule(struct starboard *sb);
 
-static bool home_step(struct springboard *sb) {
+static bool home_step(struct starboard *sb) {
 	uint32_t msec = sb_now_msec();
 	double elapsed = sb->frame_msec ? fmin(50, msec - sb->frame_msec) : 16;
 	sb->frame_msec = msec;
@@ -314,7 +315,7 @@ static bool home_step(struct springboard *sb) {
 }
 
 static void home_frame_done(void *data, struct wl_callback *callback, uint32_t time) {
-	struct springboard *sb = data;
+	struct starboard *sb = data;
 	wl_callback_destroy(callback);
 	sb->home_frame = NULL;
 	if (home_step(sb)) {
@@ -328,7 +329,7 @@ static const struct wl_callback_listener home_frame_listener = {
 	.done = home_frame_done,
 };
 
-static void home_schedule(struct springboard *sb) {
+static void home_schedule(struct starboard *sb) {
 	if (!sb->home_frame) {
 		sb->home_frame = wl_surface_frame(sb->home);
 		wl_callback_add_listener(sb->home_frame, &home_frame_listener, sb);
@@ -338,7 +339,7 @@ static void home_schedule(struct springboard *sb) {
 
 /* ---- haptics: one short AW8624 tick when an icon is picked up ---- */
 
-static void haptic_open(struct springboard *sb) {
+static void haptic_open(struct starboard *sb) {
 	sb->haptic_effect = -1;
 	DIR *dir = opendir("/sys/class/input");
 	struct dirent *entry;
@@ -374,7 +375,7 @@ static void haptic_open(struct springboard *sb) {
 	}
 }
 
-static void haptic_tick(struct springboard *sb) {
+static void haptic_tick(struct starboard *sb) {
 	if (sb->haptic_fd < 0) {
 		haptic_open(sb);
 	}
@@ -389,13 +390,13 @@ static void haptic_tick(struct springboard *sb) {
 
 /* ---- edit mode and dragging ---- */
 
-static void set_editing(struct springboard *sb, bool editing) {
+static void set_editing(struct starboard *sb, bool editing) {
 	sb->editing = editing;
 	sprite_show(&sb->done, editing ? sb->done_canvas : NULL);
 	wl_surface_commit(sb->home);
 }
 
-static void start_drag(struct springboard *sb, struct sb_touch *point) {
+static void start_drag(struct starboard *sb, struct sb_touch *point) {
 	struct sb_app *app = &sb->apps[point->app];
 	sb->dragging = point->app;
 	sb->drag_touch = point;
@@ -411,7 +412,7 @@ static int clamp(int value, int low, int high) {
 }
 
 /* Moves the dragged app to the slot under the finger; the others ease aside. */
-static void reorder(struct springboard *sb, double x, double y) {
+static void reorder(struct starboard *sb, double x, double y) {
 	struct sb_app *app = &sb->apps[sb->dragging];
 	int others_docked = dock_count(sb) - app->dock;
 	bool to_dock = y >= sb->height - DOCK_MARGIN - DOCK_HEIGHT - 6 && others_docked < DOCK_MAX;
@@ -448,7 +449,7 @@ static void reorder(struct springboard *sb, double x, double y) {
 	home_schedule(sb);
 }
 
-static void long_press(struct springboard *sb) {
+static void long_press(struct starboard *sb) {
 	struct sb_touch *point = sb->pressed;
 	sb->pressed = NULL;
 	if (point && point->down && point->app >= 0 && sb->dragging < 0) {
@@ -460,7 +461,7 @@ static bool moved_far(struct sb_touch *point) {
 	return hypot(point->x - point->start_x, point->y - point->start_y) >= TAP_SLOP;
 }
 
-void home_touch_down(struct springboard *sb, struct sb_touch *point) {
+void home_touch_down(struct starboard *sb, struct sb_touch *point) {
 	if (in_done_button(sb, point->x, point->y)) {
 		point->app = -2;
 		return;
@@ -477,7 +478,7 @@ void home_touch_down(struct springboard *sb, struct sb_touch *point) {
 	}
 }
 
-void home_touch_motion(struct springboard *sb, struct sb_touch *point) {
+void home_touch_motion(struct starboard *sb, struct sb_touch *point) {
 	if (point == sb->drag_touch) {
 		struct sb_app *app = &sb->apps[sb->dragging];
 		app->x = point->x - sb->drag_dx;
@@ -493,7 +494,7 @@ void home_touch_motion(struct springboard *sb, struct sb_touch *point) {
 	}
 }
 
-void home_touch_up(struct springboard *sb, struct sb_touch *point) {
+void home_touch_up(struct starboard *sb, struct sb_touch *point) {
 	if (point == sb->pressed) {
 		sb->pressed = NULL;
 		sb_timer_arm(&sb->long_press, 0);

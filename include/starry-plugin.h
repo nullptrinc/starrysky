@@ -1,12 +1,13 @@
+/* SPDX-License-Identifier: MIT */
 #ifndef STARRY_PLUGIN_H
 #define STARRY_PLUGIN_H
 
 /*
- * Starry springboard plugin ABI.
+ * Starry starboard plugin ABI.
  *
- * A plugin is a shared object in the springboard plugin directory that
+ * A plugin is a shared object in the starboard plugin directory that
  * exports `const struct starry_plugin starry_plugin`. It runs inside the
- * springboard process: a crash restarts springboard, never the compositor
+ * starboard process: a crash restarts starboard, never the compositor
  * or the running applications.
  *
  * Compatibility: the host refuses plugins whose `abi` differs from

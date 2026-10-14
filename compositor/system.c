@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <signal.h>
 #include <stdio.h>
@@ -172,11 +173,11 @@ static void system_bind(struct wl_client *client, void *data, uint32_t version, 
 	}
 }
 
-/* Only the springboard we started may see the system interface. */
+/* Only the starboard we started may see the system interface. */
 static bool global_filter(const struct wl_client *client, const struct wl_global *global,
 		void *data) {
 	struct starry_server *server = data;
-	return global != server->system_global || client == server->springboard;
+	return global != server->system_global || client == server->starboard;
 }
 
 /* ---- scenes ---- */
@@ -248,40 +249,40 @@ void system_scene_removed(struct starry_toplevel *toplevel) {
 	}
 }
 
-/* ---- springboard process: started on a private socket, restarted if it dies ---- */
+/* ---- starboard process: started on a private socket, restarted if it dies ---- */
 
-static int respawn_springboard(void *data) {
-	system_spawn_springboard(data);
+static int respawn_starboard(void *data) {
+	system_spawn_starboard(data);
 	return 0;
 }
 
-static void springboard_destroyed(struct wl_listener *listener, void *data) {
-	struct starry_server *server = wl_container_of(listener, server, springboard_destroy);
-	wl_list_remove(&server->springboard_destroy.link);
-	server->springboard = NULL;
+static void starboard_destroyed(struct wl_listener *listener, void *data) {
+	struct starry_server *server = wl_container_of(listener, server, starboard_destroy);
+	wl_list_remove(&server->starboard_destroy.link);
+	server->starboard = NULL;
 	server->system = NULL;
 	struct starry_toplevel *toplevel;
 	wl_list_for_each(toplevel, &server->toplevels, link) {
 		toplevel->scene = NULL; /* the resources died with the client */
 	}
 	/* Quick repeated crashes back off up to ten seconds. */
-	bool quick = starry_now_msec() - server->springboard_started_msec < 3000;
-	server->springboard_failures = quick ? server->springboard_failures + 1 : 0;
-	int delay = server->springboard_failures > 10 ? 10000 :
-		200 * (1 << (server->springboard_failures > 5 ? 5 : server->springboard_failures));
-	wlr_log(WLR_ERROR, "Springboard exited; restarting in %d ms", delay);
+	bool quick = starry_now_msec() - server->starboard_started_msec < 3000;
+	server->starboard_failures = quick ? server->starboard_failures + 1 : 0;
+	int delay = server->starboard_failures > 10 ? 10000 :
+		200 * (1 << (server->starboard_failures > 5 ? 5 : server->starboard_failures));
+	wlr_log(WLR_ERROR, "Starboard exited; restarting in %d ms", delay);
 	wl_event_source_timer_update(server->respawn, delay);
 }
 
-void system_spawn_springboard(struct starry_server *server) {
+void system_spawn_starboard(struct starry_server *server) {
 	int fds[2];
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds) < 0) {
 		wlr_log_errno(WLR_ERROR, "socketpair");
 		return;
 	}
-	const char *path = getenv("STARRY_SPRINGBOARD");
+	const char *path = getenv("STARRY_STARBOARD");
 	if (!path) {
-		path = STARRY_SPRINGBOARD_PATH;
+		path = STARRY_STARBOARD_PATH;
 	}
 	pid_t pid = fork();
 	if (pid == 0) {
@@ -300,15 +301,15 @@ void system_spawn_springboard(struct starry_server *server) {
 		close(fds[0]);
 		return;
 	}
-	server->springboard = wl_client_create(server->display, fds[0]);
-	if (!server->springboard) {
+	server->starboard = wl_client_create(server->display, fds[0]);
+	if (!server->starboard) {
 		close(fds[0]);
 		return;
 	}
-	server->springboard_started_msec = starry_now_msec();
-	server->springboard_destroy.notify = springboard_destroyed;
-	wl_client_add_destroy_listener(server->springboard, &server->springboard_destroy);
-	wlr_log(WLR_INFO, "Started springboard %s as %d", path, pid);
+	server->starboard_started_msec = starry_now_msec();
+	server->starboard_destroy.notify = starboard_destroyed;
+	wl_client_add_destroy_listener(server->starboard, &server->starboard_destroy);
+	wlr_log(WLR_INFO, "Started starboard %s as %d", path, pid);
 }
 
 void system_init(struct starry_server *server) {
@@ -317,5 +318,5 @@ void system_init(struct starry_server *server) {
 		1, server, system_bind);
 	wl_display_set_global_filter(server->display, global_filter, server);
 	server->respawn = wl_event_loop_add_timer(wl_display_get_event_loop(server->display),
-		respawn_springboard, server);
+		respawn_starboard, server);
 }
