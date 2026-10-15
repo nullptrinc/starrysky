@@ -13,7 +13,8 @@ add_project_arguments(
   '-DSTARRY_PLUGIN_DIR="@0@"'.format(prefix / plugin_dir),
   '-DSTARRY_APPS_PATH="@0@"'.format(prefix / get_option('sysconfdir') / 'starry' / 'apps'),
   language: 'c')
-rpath = prefix / get_option('libdir')
+# A private wlroots next to the binaries (e.g. /opt/starry/lib); system prefixes need none.
+rpath = prefix in ['/usr', '/usr/local'] ? '' : prefix / get_option('libdir')
 
 cc = meson.get_compiler('c')
 math = cc.find_library('m')
