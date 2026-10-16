@@ -73,3 +73,7 @@ shared_module('wifi', 'plugins/wifi.c',
   include_directories: plugin_include,
   install: true,
   install_dir: plugin_dir)
+
+if get_option('ui')
+  subdir('ui')
+endif
