@@ -20,7 +20,7 @@ namespace stardust {
 
 using NodeId = uint32_t;
 
-enum class Kind : uint8_t { Container, Label };
+enum class Kind : uint8_t { Container, Label, Plot };
 enum class Layout : uint8_t { Stack, Dock };
 enum class Orientation : uint8_t { TopToBottom, LeftToRight };
 enum class Align : uint8_t { Fill, Start, Center, End };
@@ -35,14 +35,14 @@ struct Color {
 
 enum class Prop : uint8_t {
 	Background, Radius, Opacity, Scale, TranslationX, TranslationY,
-	Text, TextColor, FontSize, Bold,
+	Text, TextColor, FontSize, Bold, Points,
 	Layout, Orientation, Spacing, Padding,
 	PreferredWidth, PreferredHeight, HorizontalAlign, VerticalAlign,
 	Animated, // 0: changes apply at once
 	Duration, // implicit animation length, ms (default 250)
 };
 
-using Value = std::variant<float, Color, std::string, int>;
+using Value = std::variant<float, Color, std::string, int, std::vector<float>>;
 
 struct Mutation {
 	enum Op : uint8_t { Create, Destroy, Append, Set } op;

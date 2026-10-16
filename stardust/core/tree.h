@@ -28,6 +28,7 @@ struct Node {
 	Animated<float> opacity, scale, tx, ty;
 
 	std::string text;
+	std::vector<float> points; // independent normalized line segments (x1,y1,x2,y2)
 	Color text_color = Color::rgb(0xffffffff);
 	float font_size = 16;
 	bool bold = false;

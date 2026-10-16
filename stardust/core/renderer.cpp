@@ -167,6 +167,37 @@ void Renderer::rect(float x, float y, float w, float h, float radius, Color colo
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
+// Plot coordinates stay inside the node; incomplete/non-finite segments are ignored.
+void Renderer::lines(float x, float y, float w, float h,
+		const std::vector<float> &points, Color color) {
+	if (color.a <= 0 || w <= 0 || h <= 0) return;
+	std::vector<float> vertices;
+	const size_t end = std::min(points.size(), size_t(16384));
+	for (size_t i = 0; i + 3 < end; i += 4) {
+		bool finite = true;
+		for (size_t j = 0; j < 4; ++j) finite &= std::isfinite(points[i+j]);
+		if (!finite) continue;
+		for (size_t j = 0; j < 4; j += 2) {
+			vertices.push_back((x + std::clamp(points[i+j], 0.f, 1.f) * w) * scale_);
+			vertices.push_back((y + std::clamp(points[i+j+1], 0.f, 1.f) * h) * scale_);
+		}
+	}
+	if (vertices.empty()) return;
+	Color c = premultiplied(color);
+	glUseProgram(rect_program_);
+	glUniform2f(rect_screen_, width_px_, height_px_);
+	glUniform2f(rect_half_, 2, 2);
+	glUniform1f(rect_radius_, 0);
+	glUniform4f(rect_color_, c.r, c.g, c.b, c.a);
+	glDisableVertexAttribArray(1);
+	glVertexAttrib2f(1, 0, 0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vertices.data());
+	glEnableVertexAttribArray(0);
+	glLineWidth(scale_);
+	glDrawArrays(GL_LINES, 0, vertices.size() / 2);
+	glLineWidth(1);
+}
+
 void Renderer::set_size(bool bold, int pixel_size) {
 	if (face_size_[bold] != pixel_size) {
 		FT_Set_Pixel_Sizes(faces_[bold], 0, pixel_size);

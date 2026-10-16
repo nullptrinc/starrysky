@@ -31,6 +31,7 @@ int main(int argc, char *argv[]) {
 	qmlRegisterType<SdNode>("Stardust", 1, 0, "Container");
 	qmlRegisterType<SdLabel>("Stardust", 1, 0, "Label");
 	qmlRegisterType<SdTimer>("Stardust", 1, 0, "Timer");
+	qmlRegisterType<SdPlot>("Stardust", 1, 0, "Plot");
 	registerConstellationTypes();
 
 	QQmlEngine engine;

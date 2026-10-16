@@ -13,6 +13,7 @@
 #include <QQmlParserStatus>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
 #include <memory>
 #include <vector>
 #include "core.h"
@@ -120,6 +121,22 @@ private:
 	QString text_, text_color_ = QStringLiteral("#ffffff");
 	qreal font_size_ = 16;
 	bool bold_ = false;
+};
+
+/* Batched line segments in normalized coordinates, rendered on the core thread. */
+class SdPlot : public SdNode {
+	Q_OBJECT
+	Q_PROPERTY(QVariantList points MEMBER points_ NOTIFY pointsChanged)
+	Q_PROPERTY(QString textColor MEMBER color_ NOTIFY colorChanged)
+public:
+	using SdNode::SdNode;
+	stardust::Kind kind() const override { return stardust::Kind::Plot; }
+signals:
+	void pointsChanged();
+	void colorChanged();
+private:
+	QVariantList points_;
+	QString color_ = QStringLiteral("#ffffff");
 };
 
 /* The top-level element: one application window. */

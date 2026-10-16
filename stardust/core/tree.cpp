@@ -147,6 +147,9 @@ void Tree::apply(const Mutation &mutation, double now) {
 			node->text_color = *color;
 		}
 		break;
+	case Prop::Points:
+		if (auto *points = std::get_if<std::vector<float>>(&value)) node->points = *points;
+		break;
 	case Prop::FontSize: node->font_size = as_float(value); break;
 	case Prop::Bold: node->bold = as_int(value) != 0; break;
 	case Prop::Layout: node->layout = Layout(as_int(value)); break;

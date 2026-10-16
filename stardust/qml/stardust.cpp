@@ -4,6 +4,7 @@
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <cstdio>
+#include <algorithm>
 #include "stardust.h"
 
 using stardust::Mutation;
@@ -36,6 +37,16 @@ int parse_enum(const QString &text, std::initializer_list<const char *> names) {
 
 /* Maps a QML property to the render core's property and value. */
 bool convert(const char *name, const QVariant &value, Prop &prop, Value &out) {
+	if (qstrcmp(name, "points") == 0) {
+		prop = Prop::Points;
+		std::vector<float> points;
+		const auto list = value.toList();
+		const auto count = std::min(list.size(), qsizetype(16384));
+		points.reserve(count);
+		for (qsizetype i = 0; i < count; ++i) points.push_back(list[i].toFloat());
+		out = std::move(points);
+		return true;
+	}
 	struct Entry {
 		const char *name;
 		Prop prop;

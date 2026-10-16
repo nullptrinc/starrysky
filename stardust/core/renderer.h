@@ -20,6 +20,8 @@ public:
 	void rect(float x, float y, float w, float h, float radius, Color color);
 	void text(float x, float y, const std::string &text, float size, bool bold, Color color);
 
+	void lines(float x, float y, float w, float h, const std::vector<float> &points, Color color);
+
 	float text_width(const std::string &text, float size, bool bold) override;
 	float line_height(float size) override;
 

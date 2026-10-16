@@ -60,6 +60,8 @@ struct Core::State {
 	bool tracing = false;
 	double trace_start = 0, trace_last = 0, trace_max_gap = 0;
 	int trace_frames = 0;
+	const char *capture_path = getenv("STARDUST_CAPTURE");
+	double capture_start = 0;
 
 	Tree tree;
 	Renderer renderer;
@@ -293,6 +295,11 @@ void Core::State::draw(NodeId id, float alpha, float k, float tx, float ty) {
 		color.a *= alpha;
 		renderer.text(x, y, node->text, node->font_size * k, node->bold, color);
 	}
+	if (node->kind == Kind::Plot) {
+		Color color = node->text_color;
+		color.a *= alpha;
+		renderer.lines(x, y, node->width * k, node->height * k, node->points, color);
+	}
 	for (NodeId child : node->children) {
 		draw(child, alpha, k, tx, ty);
 	}
@@ -308,6 +315,25 @@ void Core::State::frame() {
 	tree.layout(width, height, renderer);
 	draw(tree.root(), 1, 1, 0, 0);
 	tree.settle();
+	// Optional single client-surface capture for visual regression review.
+	if (capture_path) {
+		if (!capture_start) capture_start = now_seconds();
+		if (now_seconds() - capture_start >= 2) {
+			int w = width * scale, h = height * scale;
+			if (w > 0 && h > 0 && w <= 4096 && h <= 4096) {
+				std::vector<unsigned char> pixels(size_t(w) * h * 4);
+				glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+				if (FILE *file = fopen(capture_path, "wb")) {
+					fprintf(file, "P6\n%d %d\n255\n", w, h);
+					for (int y = h - 1; y >= 0; --y)
+						for (int x = 0; x < w; ++x)
+							fwrite(&pixels[(size_t(y) * w + x) * 4], 1, 3, file);
+					fclose(file);
+				}
+			}
+			capture_path = nullptr;
+		}
+	}
 	eglSwapBuffers(egl_display, egl_surface);
 	if (trace) {
 		double now = now_seconds();
