@@ -32,12 +32,15 @@ std::vector<Mutation> Bridge::take_mutations() {
 	return std::exchange(mutations_, {});
 }
 
-void Bridge::emit(Event event) {
+void Bridge::push_event(Event event) {
 	{
 		std::lock_guard lock(mutex_);
 		events_.push_back(event);
 	}
 	event_ready_.notify_one();
+	if (on_event) {
+		on_event();
+	}
 }
 
 std::vector<Event> Bridge::take_events() {

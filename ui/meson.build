@@ -40,3 +40,17 @@ executable('starry-ui-demo', 'demo/demo.cpp',
   override_options: ['cpp_std=c++20'],
   install_rpath: rpath,
   install: true)
+
+# QML front end: the QtQml engine as the language, Starry UI for everything else.
+qt6 = import('qt6')
+qt6_dep = dependency('qt6', modules: ['Core', 'Qml'], method: 'pkg-config', required: false)
+if qt6_dep.found()
+  qml_moc = qt6.compile_moc(headers: 'qml/sui.h', dependencies: qt6_dep)
+  executable('starry-qml', 'qml/main.cpp', 'qml/sui.cpp', qml_moc,
+    dependencies: [ui_core_dep, qt6_dep],
+    cpp_args: ui_cpp_args,
+    override_options: ['cpp_std=c++20'],
+    install_rpath: rpath,
+    install: true)
+  install_data('qml/demo.qml', install_dir: get_option('datadir') / 'starry' / 'qml')
+endif

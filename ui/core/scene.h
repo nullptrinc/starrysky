@@ -66,12 +66,15 @@ public:
 	void post(std::vector<Mutation> mutations);
 	std::vector<Mutation> take_mutations();
 
-	void emit(Event event);
+	void push_event(Event event);
 	std::vector<Event> take_events();
 	/* Blocks the application thread until an event or the timeout. */
 	std::vector<Event> wait_events(int timeout_ms);
 
 	std::function<void()> wake_core; // set by the render core
+	/* Called on the render thread after each event, for event loops that
+	 * cannot block in wait_events (the QML front end). */
+	std::function<void()> on_event;
 
 private:
 	std::mutex mutex_;

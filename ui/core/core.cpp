@@ -4,6 +4,8 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <future>
 #include <poll.h>
@@ -53,6 +55,12 @@ struct Core::State {
 	int width = 360, height = 640, scale = 1;
 	bool configured = false, resized = false, dirty = true;
 
+	/* STARRY_UI_TRACE: per-animation frame statistics on stderr. */
+	bool trace = getenv("STARRY_UI_TRACE") != nullptr;
+	bool tracing = false;
+	double trace_start = 0, trace_last = 0, trace_max_gap = 0;
+	int trace_frames = 0;
+
 	Tree tree;
 	Renderer renderer;
 
@@ -97,7 +105,7 @@ static void toplevel_configure(void *data, xdg_toplevel *, int32_t width, int32_
 	}
 }
 static void toplevel_close(void *data, xdg_toplevel *) {
-	static_cast<Core::State *>(data)->bridge.emit({Event::Closed});
+	static_cast<Core::State *>(data)->bridge.push_event({Event::Closed});
 }
 static void toplevel_bounds(void *, xdg_toplevel *, int32_t, int32_t) {}
 static void toplevel_capabilities(void *, xdg_toplevel *, wl_array *) {}
@@ -130,7 +138,7 @@ static void touch_down(void *data, wl_touch *, uint32_t, uint32_t, wl_surface *,
 	NodeId node = s->tree.hit(x, y);
 	s->touches[id] = {true, node, x, y, x, y};
 	if (node) {
-		s->bridge.emit({Event::Pressed, node, x, y});
+		s->bridge.push_event({Event::Pressed, node, x, y});
 	}
 }
 static void touch_up(void *data, wl_touch *, uint32_t, uint32_t, int32_t id) {
@@ -143,9 +151,9 @@ static void touch_up(void *data, wl_touch *, uint32_t, uint32_t, int32_t id) {
 	if (!t.node) {
 		return;
 	}
-	s->bridge.emit({Event::Released, t.node, t.x, t.y});
+	s->bridge.push_event({Event::Released, t.node, t.x, t.y});
 	if (std::hypot(t.x - t.start_x, t.y - t.start_y) < tap_slop && s->tree.hit(t.x, t.y) == t.node) {
-		s->bridge.emit({Event::Clicked, t.node, t.x, t.y});
+		s->bridge.push_event({Event::Clicked, t.node, t.x, t.y});
 	}
 }
 static void touch_motion(void *data, wl_touch *, uint32_t, int32_t id, wl_fixed_t fx,
@@ -301,6 +309,14 @@ void Core::State::frame() {
 	draw(tree.root(), 1, 1, 0, 0);
 	tree.settle();
 	eglSwapBuffers(egl_display, egl_surface);
+	if (trace) {
+		double now = now_seconds();
+		if (tracing) {
+			trace_max_gap = std::max(trace_max_gap, now - trace_last);
+			trace_frames++;
+		}
+		trace_last = now;
+	}
 }
 
 /* ---- the render thread ---- */
@@ -314,7 +330,20 @@ void Core::State::run() {
 			tree.apply(mutation, now);
 		}
 		dirty |= !mutations.empty();
+		bool was_animating = animating;
 		animating = tree.step(now);
+		if (trace && animating && !tracing) {
+			tracing = true;
+			trace_start = trace_last = now;
+			trace_frames = 0;
+			trace_max_gap = 0;
+		} else if (trace && !animating && was_animating && tracing) {
+			tracing = false;
+			double length = trace_last - trace_start;
+			fprintf(stderr, "starry-ui trace: animation %.3f s, %d frames, mean %.1f ms, "
+				"longest gap %.1f ms\n", length, trace_frames,
+				trace_frames ? length * 1000 / trace_frames : 0.0, trace_max_gap * 1000);
+		}
 		if ((dirty || animating) && configured) {
 			frame(); // blocks until the compositor wants the next frame
 			dirty = false;
@@ -336,7 +365,7 @@ void Core::State::run() {
 			wl_display_cancel_read(display);
 		}
 		if (fds[0].revents & (POLLERR | POLLHUP)) {
-			bridge.emit({Event::Closed});
+			bridge.push_event({Event::Closed});
 			break;
 		}
 		if (fds[1].revents & POLLIN) {
