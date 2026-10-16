@@ -125,15 +125,19 @@ static void draw_part(struct canvas *canvas, const struct part *part, double x, 
 double battery_draw(struct canvas *canvas, double right, double top, double height,
 		const struct sb_battery_state *state, bool dark) {
 	struct part *base = find_part("base");
-	if (!base || !state->present) {
+	if (!base) {
 		return 0;
 	}
 	double scale = height / part_height(base);
 	double width = part_width(base) * scale;
 	double left = right - width;
 
-	/* The empty battery; the sheet draws it dark, so flip it for a dark bar. */
+	/* The empty battery; the sheet draws it dark, so flip it for a dark bar.
+	 * Without a battery driver only this outline shows: level unknown. */
 	draw_part(canvas, base, left, top, scale, dark, -1);
+	if (!state->present) {
+		return width;
+	}
 
 	const char *fill = state->charging ? "green_overlay" :
 		state->saver ? "yellow_overlay" :
