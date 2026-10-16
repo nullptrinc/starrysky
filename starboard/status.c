@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include "canvas.h"
+#include "constellation.h"
 #include "starry-system-v1-client-protocol.h"
 #include "starboard.h"
 
@@ -92,7 +93,40 @@ void status_load_plugins(struct starboard *sb, const char *directory) {
 
 /* ---- status bar and home indicator ---- */
 
+static void blinks_changed(const struct cn_object *object, bool exists, void *data) {
+	struct starboard *sb = data;
+	battery_changed(&sb->battery, object, exists);
+}
+
+/* Subscribes to /blinks/power/, or again after constellationd restarted. */
+static void blinks_connect(struct starboard *sb) {
+	if (sb->blinks && cn_fd(sb->blinks) < 0 && cn_reconnect(sb->blinks)) {
+		sb_log("Constellation is back");
+	}
+	if (sb->blinks) {
+		return;
+	}
+	sb->blinks = cn_connect();
+	if (sb->blinks && !cn_subscribe(sb->blinks, CN_NAMESPACE "power/")) {
+		cn_disconnect(sb->blinks);
+		sb->blinks = NULL;
+	}
+}
+
+int status_blinks_fd(struct starboard *sb) {
+	return sb->blinks ? cn_fd(sb->blinks) : -1;
+}
+
+void status_blinks_dispatch(struct starboard *sb) {
+	if (sb->blinks && !cn_dispatch(sb->blinks, blinks_changed, sb)) {
+		sb_log("Constellation went away");
+		sb->battery = (struct sb_battery_state){0};
+	}
+	status_update(sb);
+}
+
 static void status_tick(struct starboard *sb) {
+	blinks_connect(sb);
 	status_update(sb);
 	sb_timer_arm(&sb->status_tick, 1000);
 }
@@ -115,6 +149,7 @@ void status_create(struct starboard *sb) {
 	battery_load(STARRY_DATA_DIR "/icons/battery.svg", STARRY_DATA_DIR "/icons/battery.map");
 
 	sb->status_tick.callback = status_tick;
+	blinks_connect(sb);
 	status_update(sb);
 	sb_timer_arm(&sb->status_tick, 1000);
 }
@@ -155,8 +190,7 @@ void status_update(struct starboard *sb) {
 	localtime_r(&wall, &local);
 	char clock[16];
 	strftime(clock, sizeof(clock), "%H:%M", &local);
-	struct sb_battery_state battery = {0};
-	battery_read(&battery);
+	const struct sb_battery_state battery = sb->battery;
 	char key[sizeof(sb->status_key)];
 	int length = snprintf(key, sizeof(key), "%s|%d|%d,%d,%d,%d", clock, foreground,
 		battery.present, battery.level, battery.charging, battery.saver);

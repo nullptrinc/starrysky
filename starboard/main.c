@@ -472,11 +472,12 @@ int main(void) {
 			wl_display_cancel_read(sb.display);
 			return 1;
 		}
-		struct pollfd fds[2] = {
+		struct pollfd fds[3] = {
 			{ .fd = wl_display_get_fd(sb.display), .events = POLLIN },
 			{ .fd = sigchld_fd, .events = POLLIN },
+			{ .fd = status_blinks_fd(&sb), .events = POLLIN }, /* -1 when not connected */
 		};
-		if (poll(fds, 2, next_timeout(&sb)) < 0 && errno != EINTR) {
+		if (poll(fds, 3, next_timeout(&sb)) < 0 && errno != EINTR) {
 			wl_display_cancel_read(sb.display);
 			return 1;
 		}
@@ -496,6 +497,9 @@ int main(void) {
 		}
 		if (fds[1].revents & POLLIN) {
 			reap_children(&sb, sigchld_fd);
+		}
+		if (fds[2].revents) {
+			status_blinks_dispatch(&sb);
 		}
 		run_timers(&sb);
 	}

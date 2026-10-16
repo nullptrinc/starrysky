@@ -46,6 +46,8 @@ executable('starry-compositor',
   install_rpath: rpath,
   install: true)
 
+subdir('constellation')
+
 nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
   dependencies: math,
   override_options: ['warning_level=0'])
@@ -56,6 +58,7 @@ executable('starboard',
   link_with: nanosvg,
   include_directories: plugin_include,
   dependencies: [
+    constellation_dep,
     dependency('wayland-client'),
     dependency('freetype2'),
     cc.find_library('dl', required: false),

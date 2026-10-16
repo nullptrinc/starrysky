@@ -4,13 +4,15 @@
  * battery.map, made by tools/svg-layers.py, names each layer's shapes:
  * "base" is the empty battery, the *_overlay layers are level fills,
  * "lightning" marks charging and percents_white/N, percents_black/N are digits.
- * Each part is rasterized with NanoSVG at the size the bar needs.
+ * Each part is rasterized with NanoSVG at the size the bar needs. The state
+ * comes from Constellation: /blinks/power/battery and /blinks/power/saver.
  */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "canvas.h"
+#include "constellation.h"
 #include "nanosvg/nanosvg.h"
 #include "nanosvg/nanosvgrast.h"
 #include "starboard.h"
@@ -198,32 +200,18 @@ double battery_draw(struct canvas *canvas, double right, double top, double heig
 	return right - left;
 }
 
-static bool read_line(const char *path, char *buffer, size_t size) {
-	FILE *file = fopen(path, "r");
-	if (!file) {
-		return false;
-	}
-	bool ok = fgets(buffer, (int)size, file) != NULL;
-	fclose(file);
-	buffer[strcspn(buffer, "\n")] = 0;
-	return ok;
-}
-
-void battery_read(struct sb_battery_state *state) {
-	char capacity[16], status[32];
-	state->present = read_line("/sys/class/power_supply/battery/capacity", capacity,
-		sizeof(capacity));
-	if (!state->present) {
+void battery_changed(struct sb_battery_state *state, const struct cn_object *object, bool exists) {
+	if (strcmp(object->path, CN_NAMESPACE "power/saver") == 0) {
+		state->saver = exists && cn_get_bool(object, "enabled", false);
 		return;
 	}
-	state->level = atoi(capacity);
-	state->level = state->level < 0 ? 0 : state->level > 100 ? 100 : state->level;
-	state->charging = read_line("/sys/class/power_supply/battery/status", status, sizeof(status)) &&
-		(strcmp(status, "Charging") == 0 || strcmp(status, "Full") == 0);
-	/* Starry's power saver flag; nothing sets it yet. */
-	FILE *saver = fopen("/run/starry/power-saver", "r");
-	state->saver = saver != NULL;
-	if (saver) {
-		fclose(saver);
+	if (strcmp(object->path, CN_NAMESPACE "power/battery") != 0) {
+		return;
 	}
+	state->present = exists && cn_get_bool(object, "present", false);
+	state->level = (int)cn_get_int(object, "level", 0);
+	state->level = state->level < 0 ? 0 : state->level > 100 ? 100 : state->level;
+	/* A full battery on the charger still shows the bolt. */
+	state->charging = cn_get_bool(object, "charging", false) ||
+		(cn_get_bool(object, "plugged", false) && strcmp(cn_get(object, "status", ""), "full") == 0);
 }

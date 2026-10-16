@@ -9,6 +9,7 @@
 #include <QQmlEngine>
 #include <QUrl>
 #include <cstdio>
+#include "constellation-qml.h"
 #include "stardust.h"
 
 /* SIGUSR1 taps the first element that handles onClicked, for testing. */
@@ -30,6 +31,7 @@ int main(int argc, char *argv[]) {
 	qmlRegisterType<SdNode>("Stardust", 1, 0, "Container");
 	qmlRegisterType<SdLabel>("Stardust", 1, 0, "Label");
 	qmlRegisterType<SdTimer>("Stardust", 1, 0, "Timer");
+	registerConstellationTypes();
 
 	QQmlEngine engine;
 	QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromLocal8Bit(argv[1])));

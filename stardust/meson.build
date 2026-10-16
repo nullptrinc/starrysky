@@ -45,12 +45,13 @@ executable('stardust-demo', 'demo/demo.cpp',
 qt6 = import('qt6')
 qt6_dep = dependency('qt6', modules: ['Core', 'Qml'], method: 'pkg-config', required: false)
 if qt6_dep.found()
-  qml_moc = qt6.compile_moc(headers: 'qml/stardust.h', dependencies: qt6_dep)
-  executable('stardust', 'qml/main.cpp', 'qml/stardust.cpp', qml_moc,
-    dependencies: [ui_core_dep, qt6_dep],
+  qml_moc = qt6.compile_moc(headers: ['qml/stardust.h', 'qml/constellation-qml.h'],
+    dependencies: qt6_dep)
+  executable('stardust', 'qml/main.cpp', 'qml/stardust.cpp', 'qml/constellation-qml.cpp', qml_moc,
+    dependencies: [ui_core_dep, qt6_dep, constellation_dep],
     cpp_args: ui_cpp_args,
     override_options: ['cpp_std=c++20'],
     install_rpath: rpath,
     install: true)
-  install_data('qml/demo.qml', 'qml/dialer.qml', install_dir: get_option('datadir') / 'stardust' / 'examples')
+  install_data('qml/demo.qml', 'qml/dialer.qml', 'qml/battery.qml', install_dir: get_option('datadir') / 'stardust' / 'examples')
 endif

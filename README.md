@@ -67,6 +67,43 @@ Run it with `stardust app.qml`. Elements: `Window`, `Container`, `Label`,
 `Timer`; see `stardust/qml/dialer.qml` for a fuller example.
 `STARDUST_TRACE=1` prints frame statistics for every animation.
 
+## Constellation
+
+Constellation is Starry's hardware abstraction, after QNX PPS on BlackBerry 10.
+System services are the only code that touches drivers; they publish state as
+small typed objects in the `/blinks` namespace through the `constellationd`
+broker (`/run/constellation.sock`), and applications read and subscribe to them.
+
+```
+$ blinks get /blinks/power/battery
+@/blinks/power/battery
+present:b:true
+level:n:98
+status::not-charging
+charging:b:false
+plugged:b:true
+voltage:n:4.274228
+temperature:n:28.3
+```
+
+- Attributes are `name:type:value`: `n` number, `b` boolean, empty for a string.
+  Publishing merges attributes; `-name` removes one.
+- The connection that creates an object owns it until it disconnects.
+- Subscribers get the whole object on every change. A slow subscriber skips
+  intermediate states but always gets the latest one. A path ending in `/`
+  subscribes to everything under it.
+- Objects live in the broker's memory: services publish theirs again after a
+  broker restart, values set by hand are gone.
+
+`blinks ls|get|set|del|watch` pokes at the namespace from a shell. C services
+and clients use `constellation/constellation.h`. QML apps use
+`import Constellation 1.0`: `Battery` for the battery, `Blink { path: ... }`
+for any object (`values`, `exists`, `publish({...})`). See
+`stardust/qml/battery.qml`.
+
+Services: `constellation-power` publishes `/blinks/power/battery`. starboard
+reads the battery and `/blinks/power/saver` (`enabled:b`) from Constellation.
+
 ## Layout
 
 | Path | |
@@ -77,6 +114,7 @@ Run it with `stardust app.qml`. Elements: `Window`, `Container`, `Label`,
 | `include/starry-plugin.h` | plugin ABI |
 | `plugins/` | bundled plugins |
 | `stardust/` | Stardust: `core/` render core, `qml/` QML front end and examples |
+| `constellation/` | Constellation: `constellationd` broker, client library, `blinks` tool, `services/` |
 | `data/starry-run.in` | starts the compositor through `seatd-launch` |
 
 ## Building
@@ -110,6 +148,8 @@ To start Starry at boot on a sysvinit system, link the bundled service and enabl
 ```sh
 ln -s /opt/starry/share/starry/sysvinit/starry.init /etc/init.d/starry
 update-rc.d starry defaults 99 20
+ln -s /opt/starry/share/starry/sysvinit/constellation.init /etc/init.d/constellation
+update-rc.d constellation defaults 60 20
 ```
 
 The app catalogue lives in `<prefix>/etc/starry/apps`, one app per line

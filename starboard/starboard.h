@@ -18,6 +18,8 @@
 #define SB_MAX_CARDS 16
 
 struct canvas;
+struct cn_client;
+struct cn_object;
 
 struct sb_battery_state {
 	bool present;
@@ -126,6 +128,8 @@ struct starboard {
 	struct sb_status_item status_items[SB_MAX_STATUS_ITEMS];
 	int status_item_count;
 	struct sb_timer status_tick;
+	struct cn_client *blinks; /* Constellation, for /blinks/power */
+	struct sb_battery_state battery;
 
 	/* switcher.c */
 	struct wl_surface *switcher;
@@ -177,7 +181,8 @@ void switcher_touch_up(struct starboard *sb, struct sb_touch *point, uint32_t ti
 
 /* battery.c */
 bool battery_load(const char *svg_path, const char *map_path);
-void battery_read(struct sb_battery_state *state);
+/* Updates the state from /blinks/power/battery or /blinks/power/saver. */
+void battery_changed(struct sb_battery_state *state, const struct cn_object *object, bool exists);
 /* Draws the battery right-aligned at right; returns the width used, in pixels. */
 double battery_draw(struct canvas *canvas, double right, double top, double height,
 	const struct sb_battery_state *state, bool dark);
@@ -185,6 +190,9 @@ double battery_draw(struct canvas *canvas, double right, double top, double heig
 /* status.c */
 void status_create(struct starboard *sb);
 void status_update(struct starboard *sb);
+/* Reads Constellation changes; call when status_blinks_fd() is readable. */
+void status_blinks_dispatch(struct starboard *sb);
+int status_blinks_fd(struct starboard *sb);
 void status_load_plugins(struct starboard *sb, const char *directory);
 
 #endif
