@@ -34,6 +34,39 @@ Not yet: lock screen, notifications, on-screen keyboard
 (text-input/input-method), rounded cards and live switcher previews, zoom
 from the icon when opening an app.
 
+## Stardust
+
+Stardust is Starry's application framework, in the spirit of BlackBerry 10's
+Cascades. An application describes its UI in QML; the QtQml engine is used
+only as the language. Every property change, bindings included, becomes a
+mutation for a render core that runs on its own thread and owns the window,
+layout (StackLayout, DockLayout), implicit animations, touch handling and
+GLES2 drawing. A busy application thread therefore never stalls an
+animation: an `onClicked` handler that blocks for a second leaves a running
+slide at 60 frames per second.
+
+```qml
+import Stardust 1.0
+
+Window {
+    layout: "dock"
+    background: "#101425"
+    Container {
+        id: card
+        padding: 18
+        radius: 16
+        background: card.pressed ? "#5a9cff" : "#2f80ed"
+        scale: card.pressed ? 0.96 : 1
+        onClicked: console.log("tapped")
+        Label { text: "Tap me"; fontSize: 18; bold: true }
+    }
+}
+```
+
+Run it with `stardust app.qml`. Elements: `Window`, `Container`, `Label`,
+`Timer`; see `stardust/qml/dialer.qml` for a fuller example.
+`STARDUST_TRACE=1` prints frame statistics for every animation.
+
 ## Layout
 
 | Path | |
@@ -43,6 +76,7 @@ from the icon when opening an app.
 | `protocol/starry-system-v1.xml` | compositor ↔ starboard protocol: layers, scenes, go home |
 | `include/starry-plugin.h` | plugin ABI |
 | `plugins/` | bundled plugins |
+| `stardust/` | Stardust: `core/` render core, `qml/` QML front end and examples |
 | `data/starry-run.in` | starts the compositor through `seatd-launch` |
 
 ## Building

@@ -18,7 +18,7 @@
 #include "tree.h"
 #include "xdg-shell-client-protocol.h"
 
-namespace sui {
+namespace stardust {
 
 namespace {
 
@@ -55,8 +55,8 @@ struct Core::State {
 	int width = 360, height = 640, scale = 1;
 	bool configured = false, resized = false, dirty = true;
 
-	/* STARRY_UI_TRACE: per-animation frame statistics on stderr. */
-	bool trace = getenv("STARRY_UI_TRACE") != nullptr;
+	/* STARDUST_TRACE: per-animation frame statistics on stderr. */
+	bool trace = getenv("STARDUST_TRACE") != nullptr;
 	bool tracing = false;
 	double trace_start = 0, trace_last = 0, trace_max_gap = 0;
 	int trace_frames = 0;
@@ -213,7 +213,7 @@ static const wl_registry_listener registry_listener = {registry_global, registry
 bool Core::State::connect() {
 	display = wl_display_connect(nullptr);
 	if (!display) {
-		fprintf(stderr, "starry-ui: cannot connect to the compositor\n");
+		fprintf(stderr, "stardust: cannot connect to the compositor\n");
 		return false;
 	}
 	wl_registry *registry = wl_display_get_registry(display);
@@ -221,7 +221,7 @@ bool Core::State::connect() {
 	wl_display_roundtrip(display);
 	wl_display_roundtrip(display); // output scale, seat capabilities
 	if (!compositor || !wm_base) {
-		fprintf(stderr, "starry-ui: compositor lacks xdg-shell\n");
+		fprintf(stderr, "stardust: compositor lacks xdg-shell\n");
 		return false;
 	}
 	surface = wl_compositor_create_surface(compositor);
@@ -340,7 +340,7 @@ void Core::State::run() {
 		} else if (trace && !animating && was_animating && tracing) {
 			tracing = false;
 			double length = trace_last - trace_start;
-			fprintf(stderr, "starry-ui trace: animation %.3f s, %d frames, mean %.1f ms, "
+			fprintf(stderr, "stardust trace: animation %.3f s, %d frames, mean %.1f ms, "
 				"longest gap %.1f ms\n", length, trace_frames,
 				trace_frames ? length * 1000 / trace_frames : 0.0, trace_max_gap * 1000);
 		}
@@ -444,4 +444,4 @@ void Core::stop() {
 	}
 }
 
-} // namespace sui
+} // namespace stardust

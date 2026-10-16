@@ -3,7 +3,7 @@
 #include <utility>
 #include "scene.h"
 
-namespace sui {
+namespace stardust {
 
 void Bridge::post(Mutation mutation) {
 	{
@@ -55,4 +55,4 @@ std::vector<Event> Bridge::wait_events(int timeout_ms) {
 	return std::exchange(events_, {});
 }
 
-} // namespace sui
+} // namespace stardust

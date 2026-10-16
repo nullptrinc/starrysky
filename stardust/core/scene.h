@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Starry UI: the application thread describes a tree of nodes; the render
+ * Stardust: the application thread describes a tree of nodes; the render
  * core owns a mirror of it on its own thread and does layout, implicit
  * animation, touch handling and drawing. The two sides only exchange
  * mutations and events, so a busy application never stalls an animation,
@@ -16,7 +16,7 @@
 #include <variant>
 #include <vector>
 
-namespace sui {
+namespace stardust {
 
 using NodeId = uint32_t;
 
@@ -83,4 +83,4 @@ private:
 	std::condition_variable event_ready_;
 };
 
-} // namespace sui
+} // namespace stardust

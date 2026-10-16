@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
-/* starry-qml: runs a Starry.UI QML file. The QML engine is only the language;
- * drawing, layout and animation happen in the Starry UI render core. */
+/* stardust: runs a Stardust QML file. The QML engine is only the language;
+ * drawing, layout and animation happen in the Stardust render core. */
 #include <QCoreApplication>
 #include <QSocketNotifier>
 #include <csignal>
@@ -9,7 +9,7 @@
 #include <QQmlEngine>
 #include <QUrl>
 #include <cstdio>
-#include "sui.h"
+#include "stardust.h"
 
 /* SIGUSR1 taps the first element that handles onClicked, for testing. */
 static int tap_pipe[2];
@@ -26,10 +26,10 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "usage: %s FILE.qml\n", argv[0]);
 		return 2;
 	}
-	qmlRegisterType<SuiWindow>("Starry.UI", 1, 0, "Window");
-	qmlRegisterType<SuiNode>("Starry.UI", 1, 0, "Container");
-	qmlRegisterType<SuiLabel>("Starry.UI", 1, 0, "Label");
-	qmlRegisterType<SuiTimer>("Starry.UI", 1, 0, "Timer");
+	qmlRegisterType<SdWindow>("Stardust", 1, 0, "Window");
+	qmlRegisterType<SdNode>("Stardust", 1, 0, "Container");
+	qmlRegisterType<SdLabel>("Stardust", 1, 0, "Label");
+	qmlRegisterType<SdTimer>("Stardust", 1, 0, "Timer");
 
 	QQmlEngine engine;
 	QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromLocal8Bit(argv[1])));
@@ -40,12 +40,12 @@ int main(int argc, char *argv[]) {
 		}
 		return 1;
 	}
-	auto *window = qobject_cast<SuiWindow *>(root);
+	auto *window = qobject_cast<SdWindow *>(root);
 	if (!window) {
 		fprintf(stderr, "%s: the root element must be a Window\n", argv[1]);
 		return 1;
 	}
-	if (!SuiApp::instance()->start(window)) {
+	if (!SdApp::instance()->start(window)) {
 		return 1;
 	}
 	if (pipe(tap_pipe) == 0) {
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 			char byte;
 			ssize_t ignored = read(tap_pipe[0], &byte, 1);
 			(void)ignored;
-			SuiApp::instance()->tapFirstClickable();
+			SdApp::instance()->tapFirstClickable();
 		});
 		signal(SIGUSR1, on_tap_signal);
 	}

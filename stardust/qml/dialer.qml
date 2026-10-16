@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // A dialer without a telephony backend: dial a number, "call" it, hang up.
-import Starry.UI 1.0
+import Stardust 1.0
 
 Window {
     id: app

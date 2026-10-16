@@ -7,7 +7,7 @@
 #include <vector>
 #include "scene.h"
 
-namespace sui {
+namespace stardust {
 
 /* A property that eases to each new value instead of jumping. */
 template <typename T>
@@ -74,4 +74,4 @@ private:
 	NodeId root_ = 0;
 };
 
-} // namespace sui
+} // namespace stardust

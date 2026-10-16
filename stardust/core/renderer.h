@@ -10,7 +10,7 @@
 #include FT_FREETYPE_H
 #include "tree.h"
 
-namespace sui {
+namespace stardust {
 
 class Renderer : public TextMetrics {
 public:
@@ -45,4 +45,4 @@ private:
 	int width_px_ = 0, height_px_ = 0;
 };
 
-} // namespace sui
+} // namespace stardust

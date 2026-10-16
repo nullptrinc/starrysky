@@ -3,7 +3,7 @@
 #include <cmath>
 #include "tree.h"
 
-namespace sui {
+namespace stardust {
 
 namespace {
 
@@ -304,4 +304,4 @@ NodeId Tree::hit(float x, float y) const {
 	return hit(root_, x, y, 0, 0);
 }
 
-} // namespace sui
+} // namespace stardust

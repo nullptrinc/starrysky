@@ -4,23 +4,23 @@
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <cstdio>
-#include "sui.h"
+#include "stardust.h"
 
-using sui::Mutation;
-using sui::Prop;
-using sui::Value;
+using stardust::Mutation;
+using stardust::Prop;
+using stardust::Value;
 
 namespace {
 
 /* "#RRGGBB" or "#AARRGGBB"; anything else is transparent. */
-sui::Color parse_color(const QString &text) {
+stardust::Color parse_color(const QString &text) {
 	QString hex = text.startsWith('#') ? text.mid(1) : text;
 	bool ok = false;
 	uint32_t value = hex.toUInt(&ok, 16);
 	if (!ok || (hex.size() != 6 && hex.size() != 8)) {
 		return {};
 	}
-	return sui::Color::rgb(hex.size() == 6 ? 0xff000000 | value : value);
+	return stardust::Color::rgb(hex.size() == 6 ? 0xff000000 | value : value);
 }
 
 int parse_enum(const QString &text, std::initializer_list<const char *> names) {
@@ -87,31 +87,31 @@ bool convert(const char *name, const QVariant &value, Prop &prop, Value &out) {
 
 } // namespace
 
-/* ---- SuiNode ---- */
+/* ---- SdNode ---- */
 
-SuiNode::SuiNode(QObject *parent) : QObject(parent) {}
+SdNode::SdNode(QObject *parent) : QObject(parent) {}
 
-QQmlListProperty<SuiNode> SuiNode::nodes() {
-	return QQmlListProperty<SuiNode>(this, nullptr, &SuiNode::append, &SuiNode::count,
-		&SuiNode::at, nullptr);
+QQmlListProperty<SdNode> SdNode::nodes() {
+	return QQmlListProperty<SdNode>(this, nullptr, &SdNode::append, &SdNode::count,
+		&SdNode::at, nullptr);
 }
 
-void SuiNode::append(QQmlListProperty<SuiNode> *list, SuiNode *node) {
-	auto *self = static_cast<SuiNode *>(list->object);
+void SdNode::append(QQmlListProperty<SdNode> *list, SdNode *node) {
+	auto *self = static_cast<SdNode *>(list->object);
 	node->parent_node_ = self;
 	self->children_.append(node);
 }
 
-qsizetype SuiNode::count(QQmlListProperty<SuiNode> *list) {
-	return static_cast<SuiNode *>(list->object)->children_.size();
+qsizetype SdNode::count(QQmlListProperty<SdNode> *list) {
+	return static_cast<SdNode *>(list->object)->children_.size();
 }
 
-SuiNode *SuiNode::at(QQmlListProperty<SuiNode> *list, qsizetype index) {
-	return static_cast<SuiNode *>(list->object)->children_.at(index);
+SdNode *SdNode::at(QQmlListProperty<SdNode> *list, qsizetype index) {
+	return static_cast<SdNode *>(list->object)->children_.at(index);
 }
 
 /* Every property with a change signal reports to one slot. */
-void SuiNode::classBegin() {
+void SdNode::classBegin() {
 	const QMetaObject *meta = metaObject();
 	const QMetaMethod slot = meta->method(meta->indexOfSlot("propertyChanged()"));
 	for (int i = QObject::staticMetaObject.propertyCount(); i < meta->propertyCount(); i++) {
@@ -122,8 +122,8 @@ void SuiNode::classBegin() {
 	}
 }
 
-void SuiNode::propertyChanged() {
-	SuiApp *app = SuiApp::instance();
+void SdNode::propertyChanged() {
+	SdApp *app = SdApp::instance();
 	if (!app->live() || !id) {
 		return; // the initial values go out with the node's creation
 	}
@@ -137,25 +137,25 @@ void SuiNode::propertyChanged() {
 		Prop prop;
 		Value value;
 		if (convert(property.name(), property.read(this), prop, value)) {
-			app->post({Mutation::Set, id, 0, sui::Kind::Container, prop, std::move(value)});
+			app->post({Mutation::Set, id, 0, stardust::Kind::Container, prop, std::move(value)});
 		}
 	}
 }
 
-bool SuiNode::handlesClicked() const {
-	return isSignalConnected(QMetaMethod::fromSignal(&SuiNode::clicked));
+bool SdNode::handlesClicked() const {
+	return isSignalConnected(QMetaMethod::fromSignal(&SdNode::clicked));
 }
 
-void SuiNode::setPressed(bool pressed) {
+void SdNode::setPressed(bool pressed) {
 	if (pressed_ != pressed) {
 		pressed_ = pressed;
 		emit pressedChanged();
 	}
 }
 
-/* ---- SuiTimer ---- */
+/* ---- SdTimer ---- */
 
-SuiTimer::SuiTimer(QObject *parent) : QObject(parent) {
+SdTimer::SdTimer(QObject *parent) : QObject(parent) {
 	timer_.setInterval(1000);
 	timer_.setSingleShot(true);
 	connect(&timer_, &QTimer::timeout, this, [this] {
@@ -166,14 +166,14 @@ SuiTimer::SuiTimer(QObject *parent) : QObject(parent) {
 	});
 }
 
-void SuiTimer::setInterval(int interval) {
+void SdTimer::setInterval(int interval) {
 	if (interval != timer_.interval()) {
 		timer_.setInterval(interval);
 		emit intervalChanged();
 	}
 }
 
-void SuiTimer::setRunning(bool running) {
+void SdTimer::setRunning(bool running) {
 	if (running == timer_.isActive()) {
 		return;
 	}
@@ -181,7 +181,7 @@ void SuiTimer::setRunning(bool running) {
 	emit runningChanged();
 }
 
-void SuiTimer::setRepeat(bool repeat) {
+void SdTimer::setRepeat(bool repeat) {
 	if (repeat == !timer_.isSingleShot()) {
 		return;
 	}
@@ -189,19 +189,19 @@ void SuiTimer::setRepeat(bool repeat) {
 	emit repeatChanged();
 }
 
-void SuiTimer::restart() {
+void SdTimer::restart() {
 	timer_.start();
 	emit runningChanged();
 }
 
-/* ---- SuiApp ---- */
+/* ---- SdApp ---- */
 
-SuiApp *SuiApp::instance() {
-	static SuiApp app;
+SdApp *SdApp::instance() {
+	static SdApp app;
 	return &app;
 }
 
-void SuiApp::create(SuiNode *node, sui::NodeId parent) {
+void SdApp::create(SdNode *node, stardust::NodeId parent) {
 	node->id = ++last_id_;
 	nodes_.insert(node->id, node);
 	batch_.push_back({Mutation::Create, node->id, 0, node->kind()});
@@ -211,23 +211,23 @@ void SuiApp::create(SuiNode *node, sui::NodeId parent) {
 		Prop prop;
 		Value value;
 		if (convert(property.name(), property.read(node), prop, value)) {
-			batch_.push_back({Mutation::Set, node->id, 0, sui::Kind::Container, prop,
+			batch_.push_back({Mutation::Set, node->id, 0, stardust::Kind::Container, prop,
 				std::move(value)});
 		}
 	}
 	batch_.push_back({Mutation::Append, node->id, parent});
-	for (SuiNode *child : node->children()) {
+	for (SdNode *child : node->children()) {
 		create(child, node->id);
 	}
 }
 
-bool SuiApp::start(SuiWindow *window) {
-	sui::CoreOptions options;
+bool SdApp::start(SdWindow *window) {
+	stardust::CoreOptions options;
 	options.title = window->title_.toStdString();
 	options.app_id = window->app_id_.toStdString();
-	core_ = std::make_unique<sui::Core>(bridge_, options);
+	core_ = std::make_unique<stardust::Core>(bridge_, options);
 	bridge_.on_event = [this] {
-		QMetaObject::invokeMethod(this, &SuiApp::drainEvents, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(this, &SdApp::drainEvents, Qt::QueuedConnection);
 	};
 	if (!core_->start()) {
 		return false;
@@ -238,7 +238,7 @@ bool SuiApp::start(SuiWindow *window) {
 	return true;
 }
 
-void SuiApp::post(Mutation mutation) {
+void SdApp::post(Mutation mutation) {
 	/* Straight to the render core: a handler that then blocks (or runs long)
 	 * must not hold back what it already changed. The core picks up every
 	 * mutation waiting at the start of a frame, so a binding cascade still
@@ -246,41 +246,41 @@ void SuiApp::post(Mutation mutation) {
 	bridge_.post(std::move(mutation));
 }
 
-void SuiApp::flush() {
+void SdApp::flush() {
 	flush_scheduled_ = false;
 	if (!batch_.empty()) {
 		bridge_.post(std::exchange(batch_, {}));
 	}
 }
 
-void SuiApp::tapFirstClickable() {
-	for (sui::NodeId id = 1; id <= last_id_; id++) {
-		SuiNode *node = nodes_.value(id);
+void SdApp::tapFirstClickable() {
+	for (stardust::NodeId id = 1; id <= last_id_; id++) {
+		SdNode *node = nodes_.value(id);
 		if (node && node->handlesClicked()) {
 			QElapsedTimer timer;
 			timer.start();
 			emit node->clicked();
-			fprintf(stderr, "starry-ui trace: node %u onClicked ran %lld ms on the QML thread\n",
+			fprintf(stderr, "stardust trace: node %u onClicked ran %lld ms on the QML thread\n",
 				id, (long long)timer.elapsed());
 			return;
 		}
 	}
 }
 
-void SuiApp::drainEvents() {
-	for (const sui::Event &event : bridge_.take_events()) {
-		if (event.type == sui::Event::Closed) {
+void SdApp::drainEvents() {
+	for (const stardust::Event &event : bridge_.take_events()) {
+		if (event.type == stardust::Event::Closed) {
 			QCoreApplication::quit();
 			return;
 		}
-		SuiNode *node = nodes_.value(event.node);
+		SdNode *node = nodes_.value(event.node);
 		/* pressed holds for the touched node and all its ancestors. */
-		for (SuiNode *n = node; n && event.type != sui::Event::Clicked; n = n->parentNode()) {
-			n->setPressed(event.type == sui::Event::Pressed);
+		for (SdNode *n = node; n && event.type != stardust::Event::Clicked; n = n->parentNode()) {
+			n->setPressed(event.type == stardust::Event::Pressed);
 		}
-		if (event.type == sui::Event::Clicked) {
+		if (event.type == stardust::Event::Clicked) {
 			/* The nearest ancestor that handles onClicked gets it. */
-			for (SuiNode *n = node; n; n = n->parentNode()) {
+			for (SdNode *n = node; n; n = n->parentNode()) {
 				if (n->handlesClicked()) {
 					emit n->clicked();
 					break;

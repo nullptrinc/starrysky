@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Starry.UI QML types. They are thin QObjects: every property change becomes
+ * Stardust QML types. They are thin QObjects: every property change becomes
  * a mutation for the render core, which does the layout, animation and
  * drawing on its own thread. Touches come back as signals.
  */
@@ -18,7 +18,7 @@
 #include "core.h"
 #include "scene.h"
 
-class SuiNode : public QObject, public QQmlParserStatus {
+class SdNode : public QObject, public QQmlParserStatus {
 	Q_OBJECT
 	Q_INTERFACES(QQmlParserStatus)
 	Q_CLASSINFO("DefaultProperty", "nodes")
@@ -40,21 +40,21 @@ class SuiNode : public QObject, public QQmlParserStatus {
 	Q_PROPERTY(bool animated MEMBER animated_ NOTIFY animatedChanged)
 	Q_PROPERTY(int duration MEMBER duration_ NOTIFY durationChanged)
 	Q_PROPERTY(bool pressed READ pressed NOTIFY pressedChanged)
-	Q_PROPERTY(QQmlListProperty<SuiNode> nodes READ nodes)
+	Q_PROPERTY(QQmlListProperty<SdNode> nodes READ nodes)
 
 public:
-	explicit SuiNode(QObject *parent = nullptr);
-	virtual sui::Kind kind() const { return sui::Kind::Container; }
+	explicit SdNode(QObject *parent = nullptr);
+	virtual stardust::Kind kind() const { return stardust::Kind::Container; }
 
-	QQmlListProperty<SuiNode> nodes();
-	const QList<SuiNode *> &children() const { return children_; }
-	SuiNode *parentNode() const { return parent_node_; }
+	QQmlListProperty<SdNode> nodes();
+	const QList<SdNode *> &children() const { return children_; }
+	SdNode *parentNode() const { return parent_node_; }
 	bool pressed() const { return pressed_; }
 	void setPressed(bool pressed);
 	/* Whether QML code handles onClicked on this node. */
 	bool handlesClicked() const;
 
-	sui::NodeId id = 0;
+	stardust::NodeId id = 0;
 
 	void classBegin() override;
 	void componentComplete() override {}
@@ -83,9 +83,9 @@ private slots:
 	void propertyChanged();
 
 private:
-	static void append(QQmlListProperty<SuiNode> *list, SuiNode *node);
-	static qsizetype count(QQmlListProperty<SuiNode> *list);
-	static SuiNode *at(QQmlListProperty<SuiNode> *list, qsizetype index);
+	static void append(QQmlListProperty<SdNode> *list, SdNode *node);
+	static qsizetype count(QQmlListProperty<SdNode> *list);
+	static SdNode *at(QQmlListProperty<SdNode> *list, qsizetype index);
 
 	QString background_;
 	qreal radius_ = 0, opacity_ = 1, scale_ = 1, translation_x_ = 0, translation_y_ = 0;
@@ -95,11 +95,11 @@ private:
 	bool animated_ = true;
 	int duration_ = 250;
 	bool pressed_ = false;
-	QList<SuiNode *> children_;
-	SuiNode *parent_node_ = nullptr;
+	QList<SdNode *> children_;
+	SdNode *parent_node_ = nullptr;
 };
 
-class SuiLabel : public SuiNode {
+class SdLabel : public SdNode {
 	Q_OBJECT
 	Q_PROPERTY(QString text MEMBER text_ NOTIFY textChanged)
 	Q_PROPERTY(QString textColor MEMBER text_color_ NOTIFY textColorChanged)
@@ -107,8 +107,8 @@ class SuiLabel : public SuiNode {
 	Q_PROPERTY(bool bold MEMBER bold_ NOTIFY boldChanged)
 
 public:
-	using SuiNode::SuiNode;
-	sui::Kind kind() const override { return sui::Kind::Label; }
+	using SdNode::SdNode;
+	stardust::Kind kind() const override { return stardust::Kind::Label; }
 
 signals:
 	void textChanged();
@@ -123,14 +123,14 @@ private:
 };
 
 /* The top-level element: one application window. */
-class SuiWindow : public SuiNode {
+class SdWindow : public SdNode {
 	Q_OBJECT
 	Q_PROPERTY(QString title MEMBER title_ NOTIFY titleChanged)
 	Q_PROPERTY(QString appId MEMBER app_id_ NOTIFY appIdChanged)
 
 public:
-	using SuiNode::SuiNode;
-	QString title_ = QStringLiteral("Starry"), app_id_ = QStringLiteral("starry-qml");
+	using SdNode::SdNode;
+	QString title_ = QStringLiteral("Starry"), app_id_ = QStringLiteral("stardust");
 
 signals:
 	void titleChanged();
@@ -138,14 +138,14 @@ signals:
 };
 
 /* A repeating or one-shot timer, so apps need no extra QML modules. */
-class SuiTimer : public QObject {
+class SdTimer : public QObject {
 	Q_OBJECT
 	Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
 	Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
 	Q_PROPERTY(bool repeat READ repeat WRITE setRepeat NOTIFY repeatChanged)
 
 public:
-	explicit SuiTimer(QObject *parent = nullptr);
+	explicit SdTimer(QObject *parent = nullptr);
 	int interval() const { return timer_.interval(); }
 	void setInterval(int interval);
 	bool running() const { return timer_.isActive(); }
@@ -165,12 +165,12 @@ private:
 };
 
 /* Owns the render core and translates between QML objects and the bridge. */
-class SuiApp : public QObject {
+class SdApp : public QObject {
 	Q_OBJECT
 public:
-	static SuiApp *instance();
-	bool start(SuiWindow *window);
-	void post(sui::Mutation mutation);
+	static SdApp *instance();
+	bool start(SdWindow *window);
+	void post(stardust::Mutation mutation);
 	bool live() const { return live_; }
 	/* Emits clicked on the first node with an onClicked handler. */
 	void tapFirstClickable();
@@ -180,12 +180,12 @@ private slots:
 	void drainEvents();
 
 private:
-	void create(SuiNode *node, sui::NodeId parent);
+	void create(SdNode *node, stardust::NodeId parent);
 
-	sui::Bridge bridge_;
-	std::unique_ptr<sui::Core> core_;
-	std::vector<sui::Mutation> batch_;
-	QHash<sui::NodeId, SuiNode *> nodes_;
-	sui::NodeId last_id_ = 0;
+	stardust::Bridge bridge_;
+	std::unique_ptr<stardust::Core> core_;
+	std::vector<stardust::Mutation> batch_;
+	QHash<stardust::NodeId, SdNode *> nodes_;
+	stardust::NodeId last_id_ = 0;
 	bool flush_scheduled_ = false, live_ = false;
 };

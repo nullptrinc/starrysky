@@ -12,11 +12,11 @@
 #include <thread>
 #include "scene.h"
 
-namespace sui {
+namespace stardust {
 
 struct CoreOptions {
-	std::string title = "Starry UI";
-	std::string app_id = "starry-ui";
+	std::string title = "Stardust";
+	std::string app_id = "stardust";
 	std::string regular_font = "/usr/share/fonts/ttf/LiberationSans-Regular.ttf";
 	std::string bold_font = "/usr/share/fonts/ttf/LiberationSans-Bold.ttf";
 };
@@ -38,4 +38,4 @@ private:
 	std::thread thread_;
 };
 
-} // namespace sui
+} // namespace stardust

@@ -11,7 +11,7 @@
 #include <utility>
 #include "core.h"
 
-using namespace sui;
+using namespace stardust;
 
 namespace {
 
@@ -42,7 +42,7 @@ private:
 
 int main() {
 	Bridge bridge;
-	Core core(bridge, {.title = "Starry UI demo", .app_id = "starry-ui-demo"});
+	Core core(bridge, {.title = "Stardust demo", .app_id = "stardust-demo"});
 	if (!core.start()) {
 		return 1;
 	}
@@ -57,7 +57,7 @@ int main() {
 	page.set(column, Prop::Spacing, 16.0f);
 
 	NodeId title = page.create(Kind::Label, column);
-	page.set(title, Prop::Text, std::string("Starry UI"));
+	page.set(title, Prop::Text, std::string("Stardust"));
 	page.set(title, Prop::FontSize, 30.0f);
 	page.set(title, Prop::Bold, 1);
 

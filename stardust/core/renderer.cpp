@@ -5,7 +5,7 @@
 #include <vector>
 #include "renderer.h"
 
-namespace sui {
+namespace stardust {
 
 namespace {
 
@@ -67,7 +67,7 @@ GLuint compile(GLenum type, const char *source) {
 	if (!ok) {
 		char log[512];
 		glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
-		fprintf(stderr, "starry-ui: shader: %s\n", log);
+		fprintf(stderr, "stardust: shader: %s\n", log);
 	}
 	return shader;
 }
@@ -105,7 +105,7 @@ uint32_t next_codepoint(const char *&s) {
 bool Renderer::init(const char *regular_font, const char *bold_font) {
 	if (FT_Init_FreeType(&library_) || FT_New_Face(library_, regular_font, 0, &faces_[0]) ||
 			FT_New_Face(library_, bold_font, 0, &faces_[1])) {
-		fprintf(stderr, "starry-ui: cannot load fonts\n");
+		fprintf(stderr, "stardust: cannot load fonts\n");
 		return false;
 	}
 	rect_program_ = link(rect_vertex, rect_fragment, "a_local");
@@ -273,4 +273,4 @@ float Renderer::line_height(float size) {
 	return std::ceil(size * 1.25f);
 }
 
-} // namespace sui
+} // namespace stardust

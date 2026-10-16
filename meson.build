@@ -80,8 +80,8 @@ shared_module('wifi', 'plugins/wifi.c',
   install: true,
   install_dir: plugin_dir)
 
-if get_option('ui')
-  subdir('ui')
+if get_option('stardust')
+  subdir('stardust')
 endif
 
 install_data('data/icons/battery.svg', 'data/icons/battery.map',

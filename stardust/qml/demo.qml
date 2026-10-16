@@ -2,12 +2,12 @@
 // The render core demo in QML. Tapping the card slides the puck for 1.5 s
 // and then blocks the QML thread for a second: the slide keeps going,
 // because animation runs in the render core.
-import Starry.UI 1.0
+import Stardust 1.0
 
 Window {
     id: window
-    title: "Starry UI QML"
-    appId: "starry-qml-demo"
+    title: "Stardust QML"
+    appId: "stardust-demo"
     layout: "dock"
     background: "#101425"
 
@@ -24,7 +24,7 @@ Window {
         spacing: 16
 
         Label {
-            text: window.taps ? "Tapped " + window.taps : "Starry UI"
+            text: window.taps ? "Tapped " + window.taps : "Stardust"
             fontSize: 30
             bold: true
         }

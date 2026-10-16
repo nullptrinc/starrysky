@@ -1,4 +1,4 @@
-# Starry UI: a declarative UI framework in the spirit of BlackBerry Cascades.
+# Stardust: a declarative UI framework in the spirit of BlackBerry Cascades.
 # For now: the render core and a C++ demo; the QML front end comes next.
 add_languages('cpp', native: false)
 ui_cpp_args = ['-Wno-unused-parameter', '-Wno-missing-field-initializers']
@@ -22,7 +22,7 @@ ui_deps = [
   math,
 ]
 
-ui_core = static_library('starry-ui-core',
+ui_core = static_library('stardust-core',
   'core/bridge.cpp', 'core/tree.cpp', 'core/renderer.cpp', 'core/core.cpp',
   xdg_shell_code, xdg_shell_client,
   dependencies: ui_deps,
@@ -34,23 +34,23 @@ ui_core_dep = declare_dependency(
   include_directories: include_directories('core'),
   dependencies: ui_deps)
 
-executable('starry-ui-demo', 'demo/demo.cpp',
+executable('stardust-demo', 'demo/demo.cpp',
   dependencies: ui_core_dep,
   cpp_args: ui_cpp_args,
   override_options: ['cpp_std=c++20'],
   install_rpath: rpath,
   install: true)
 
-# QML front end: the QtQml engine as the language, Starry UI for everything else.
+# QML front end: the QtQml engine as the language, Stardust for everything else.
 qt6 = import('qt6')
 qt6_dep = dependency('qt6', modules: ['Core', 'Qml'], method: 'pkg-config', required: false)
 if qt6_dep.found()
-  qml_moc = qt6.compile_moc(headers: 'qml/sui.h', dependencies: qt6_dep)
-  executable('starry-qml', 'qml/main.cpp', 'qml/sui.cpp', qml_moc,
+  qml_moc = qt6.compile_moc(headers: 'qml/stardust.h', dependencies: qt6_dep)
+  executable('stardust', 'qml/main.cpp', 'qml/stardust.cpp', qml_moc,
     dependencies: [ui_core_dep, qt6_dep],
     cpp_args: ui_cpp_args,
     override_options: ['cpp_std=c++20'],
     install_rpath: rpath,
     install: true)
-  install_data('qml/demo.qml', 'qml/dialer.qml', install_dir: get_option('datadir') / 'starry' / 'qml')
+  install_data('qml/demo.qml', 'qml/dialer.qml', install_dir: get_option('datadir') / 'stardust' / 'examples')
 endif

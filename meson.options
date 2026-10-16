@@ -1,1 +1,1 @@
-option('ui', type: 'boolean', value: true, description: 'Build the Starry UI render core and demo')
+option('stardust', type: 'boolean', value: true, description: 'Build Stardust, the application framework')
