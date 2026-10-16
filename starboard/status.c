@@ -18,6 +18,7 @@
 #define CLOCK_SIZE 15
 #define EDGE 22
 #define GAP 10
+#define BATTERY_HEIGHT 12
 
 /* ---- plugin host ---- */
 
@@ -111,6 +112,8 @@ void status_create(struct starboard *sb) {
 	canvas_round_rect(sb->indicator_canvas, 0, 0, INDICATOR_WIDTH * s, INDICATOR_HEIGHT * s,
 		2.5 * s, 0xe6ffffff);
 
+	battery_load(STARRY_DATA_DIR "/icons/battery.svg", STARRY_DATA_DIR "/icons/battery.map");
+
 	sb->status_tick.callback = status_tick;
 	status_update(sb);
 	sb_timer_arm(&sb->status_tick, 1000);
@@ -152,8 +155,11 @@ void status_update(struct starboard *sb) {
 	localtime_r(&wall, &local);
 	char clock[16];
 	strftime(clock, sizeof(clock), "%H:%M", &local);
+	struct sb_battery_state battery = {0};
+	battery_read(&battery);
 	char key[sizeof(sb->status_key)];
-	int length = snprintf(key, sizeof(key), "%s|%d", clock, foreground);
+	int length = snprintf(key, sizeof(key), "%s|%d|%d,%d,%d,%d", clock, foreground,
+		battery.present, battery.level, battery.charging, battery.saver);
 	for (int i = 0; i < sb->status_item_count && length < (int)sizeof(key); i++) {
 		length += snprintf(key + length, sizeof(key) - length, "|%s", sb->status_items[i].text);
 	}
@@ -171,6 +177,12 @@ void status_update(struct starboard *sb) {
 	canvas_text(canvas, true, CLOCK_SIZE * s, EDGE * s, baseline, 0xffffffff, clock);
 	double left = EDGE * s + canvas_text_width(true, CLOCK_SIZE * s, clock) + GAP * s;
 	double right = (w - EDGE) * s;
+	/* The status bar is dark today, so the battery uses its light art. */
+	double battery_width = battery_draw(canvas, right, (SB_STATUS_HEIGHT - BATTERY_HEIGHT) / 2.0 * s,
+		BATTERY_HEIGHT * s, &battery, true);
+	if (battery_width > 0) {
+		right -= battery_width + GAP * s;
+	}
 	for (int i = 0; i < sb->status_item_count; i++) {
 		struct sb_status_item *item = &sb->status_items[i];
 		if (!item->text[0]) {

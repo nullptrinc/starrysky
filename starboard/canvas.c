@@ -172,3 +172,26 @@ void canvas_text(struct canvas *canvas, bool bold, double size,
 		pen += glyph->advance.x / 64.0;
 	}
 }
+
+void canvas_blit_rgba(struct canvas *canvas, int x, int y, const uint8_t *rgba,
+		int width, int height, bool invert, int clip_width) {
+	int columns = clip_width < width ? clip_width : width;
+	for (int row = 0; row < height; row++) {
+		int py = y + row;
+		if (py < 0 || py >= canvas->height) {
+			continue;
+		}
+		for (int col = 0; col < columns; col++) {
+			int px = x + col;
+			const uint8_t *p = rgba + ((size_t)row * width + col) * 4;
+			if (px < 0 || px >= canvas->width || p[3] == 0) {
+				continue;
+			}
+			uint32_t r = invert ? 255 - p[0] : p[0];
+			uint32_t g = invert ? 255 - p[1] : p[1];
+			uint32_t b = invert ? 255 - p[2] : p[2];
+			uint32_t argb = (uint32_t)p[3] << 24 | r << 16 | g << 8 | b;
+			blend(&canvas->pixels[py * canvas->width + px], premultiply(argb, 1));
+		}
+	}
+}

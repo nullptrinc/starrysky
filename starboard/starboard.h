@@ -19,6 +19,13 @@
 
 struct canvas;
 
+struct sb_battery_state {
+	bool present;
+	int level; /* percent */
+	bool charging;
+	bool saver;
+};
+
 /* A subsurface of the home surface; positions are logical. */
 struct sb_sprite {
 	struct wl_surface *surface;
@@ -167,6 +174,13 @@ void switcher_scene_closed(struct starboard *sb, struct sb_scene *scene);
 void switcher_touch_down(struct starboard *sb, struct sb_touch *point);
 void switcher_touch_motion(struct starboard *sb, struct sb_touch *point, uint32_t time);
 void switcher_touch_up(struct starboard *sb, struct sb_touch *point, uint32_t time);
+
+/* battery.c */
+bool battery_load(const char *svg_path, const char *map_path);
+void battery_read(struct sb_battery_state *state);
+/* Draws the battery right-aligned at right; returns the width used, in pixels. */
+double battery_draw(struct canvas *canvas, double right, double top, double height,
+	const struct sb_battery_state *state, bool dark);
 
 /* status.c */
 void status_create(struct starboard *sb);

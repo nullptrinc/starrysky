@@ -12,6 +12,7 @@ add_project_arguments(
   '-DSTARRY_STARBOARD_PATH="@0@"'.format(prefix / get_option('bindir') / 'starboard'),
   '-DSTARRY_PLUGIN_DIR="@0@"'.format(prefix / plugin_dir),
   '-DSTARRY_APPS_PATH="@0@"'.format(prefix / get_option('sysconfdir') / 'starry' / 'apps'),
+  '-DSTARRY_DATA_DIR="@0@"'.format(prefix / get_option('datadir') / 'starry'),
   language: 'c')
 # A private wlroots next to the binaries (e.g. /opt/starry/lib); system prefixes need none.
 rpath = prefix in ['/usr', '/usr/local'] ? '' : prefix / get_option('libdir')
@@ -45,9 +46,14 @@ executable('starry-compositor',
   install_rpath: rpath,
   install: true)
 
+nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
+  dependencies: math,
+  override_options: ['warning_level=0'])
+
 executable('starboard',
   'starboard/main.c', 'starboard/home.c', 'starboard/status.c', 'starboard/switcher.c',
-  'starboard/canvas.c', protocol_code, protocol_client,
+  'starboard/canvas.c', 'starboard/battery.c', protocol_code, protocol_client,
+  link_with: nanosvg,
   include_directories: plugin_include,
   dependencies: [
     dependency('wayland-client'),
@@ -77,3 +83,6 @@ shared_module('wifi', 'plugins/wifi.c',
 if get_option('ui')
   subdir('ui')
 endif
+
+install_data('data/icons/battery.svg', 'data/icons/battery.map',
+  install_dir: get_option('datadir') / 'starry' / 'icons')
