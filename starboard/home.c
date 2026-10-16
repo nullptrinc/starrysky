@@ -185,7 +185,14 @@ static void draw_app(struct starboard *sb, struct sb_app *app) {
 		canvas_round_rect(icon, 0, 0, size, size, size * 14 / ICON, app->color);
 		/* Soft top highlight gives the flat colour some depth. */
 		canvas_round_rect(icon, 0, 0, size, size / 2, size * 14 / ICON, 0x1affffff);
-		char initial[2] = { app->name[0], 0 };
+		/* The first character, which may take several UTF-8 bytes. */
+		char initial[8] = "";
+		size_t length = 1;
+		while (length < sizeof(initial) - 1 &&
+				((unsigned char)app->name[length] & 0xc0) == 0x80) {
+			length++;
+		}
+		memcpy(initial, app->name, length);
 		double text = size / 2;
 		double width = canvas_text_width(true, text, initial);
 		canvas_text(icon, true, text, size / 2 - width / 2, size / 2 + text / 3,

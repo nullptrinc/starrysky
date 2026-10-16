@@ -217,6 +217,11 @@ void sb_launch(struct starboard *sb, int index) {
 			return;
 		}
 	}
+	/* An adopted app's process is not our child, so no SIGCHLD tells us it
+	 * died; check before waiting for a window that will never come. */
+	if (app->pid && kill(app->pid, 0) != 0 && errno == ESRCH) {
+		app->pid = 0;
+	}
 	if (app->pid) {
 		return; /* Started, but no window yet. */
 	}
