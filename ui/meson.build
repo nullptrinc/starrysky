@@ -52,5 +52,5 @@ if qt6_dep.found()
     override_options: ['cpp_std=c++20'],
     install_rpath: rpath,
     install: true)
-  install_data('qml/demo.qml', install_dir: get_option('datadir') / 'starry' / 'qml')
+  install_data('qml/demo.qml', 'qml/dialer.qml', install_dir: get_option('datadir') / 'starry' / 'qml')
 endif

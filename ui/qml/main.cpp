@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
 	qmlRegisterType<SuiWindow>("Starry.UI", 1, 0, "Window");
 	qmlRegisterType<SuiNode>("Starry.UI", 1, 0, "Container");
 	qmlRegisterType<SuiLabel>("Starry.UI", 1, 0, "Label");
+	qmlRegisterType<SuiTimer>("Starry.UI", 1, 0, "Timer");
 
 	QQmlEngine engine;
 	QQmlComponent component(&engine, QUrl::fromLocalFile(QString::fromLocal8Bit(argv[1])));

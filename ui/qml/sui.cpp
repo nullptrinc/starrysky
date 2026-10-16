@@ -153,6 +153,47 @@ void SuiNode::setPressed(bool pressed) {
 	}
 }
 
+/* ---- SuiTimer ---- */
+
+SuiTimer::SuiTimer(QObject *parent) : QObject(parent) {
+	timer_.setInterval(1000);
+	timer_.setSingleShot(true);
+	connect(&timer_, &QTimer::timeout, this, [this] {
+		emit triggered();
+		if (timer_.isSingleShot()) {
+			emit runningChanged();
+		}
+	});
+}
+
+void SuiTimer::setInterval(int interval) {
+	if (interval != timer_.interval()) {
+		timer_.setInterval(interval);
+		emit intervalChanged();
+	}
+}
+
+void SuiTimer::setRunning(bool running) {
+	if (running == timer_.isActive()) {
+		return;
+	}
+	running ? timer_.start() : timer_.stop();
+	emit runningChanged();
+}
+
+void SuiTimer::setRepeat(bool repeat) {
+	if (repeat == !timer_.isSingleShot()) {
+		return;
+	}
+	timer_.setSingleShot(!repeat);
+	emit repeatChanged();
+}
+
+void SuiTimer::restart() {
+	timer_.start();
+	emit runningChanged();
+}
+
 /* ---- SuiApp ---- */
 
 SuiApp *SuiApp::instance() {

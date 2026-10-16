@@ -12,6 +12,7 @@
 #include <QQmlListProperty>
 #include <QQmlParserStatus>
 #include <QString>
+#include <QTimer>
 #include <memory>
 #include <vector>
 #include "core.h"
@@ -134,6 +135,33 @@ public:
 signals:
 	void titleChanged();
 	void appIdChanged();
+};
+
+/* A repeating or one-shot timer, so apps need no extra QML modules. */
+class SuiTimer : public QObject {
+	Q_OBJECT
+	Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
+	Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
+	Q_PROPERTY(bool repeat READ repeat WRITE setRepeat NOTIFY repeatChanged)
+
+public:
+	explicit SuiTimer(QObject *parent = nullptr);
+	int interval() const { return timer_.interval(); }
+	void setInterval(int interval);
+	bool running() const { return timer_.isActive(); }
+	void setRunning(bool running);
+	bool repeat() const { return !timer_.isSingleShot(); }
+	void setRepeat(bool repeat);
+	Q_INVOKABLE void restart();
+
+signals:
+	void intervalChanged();
+	void runningChanged();
+	void repeatChanged();
+	void triggered();
+
+private:
+	QTimer timer_;
 };
 
 /* Owns the render core and translates between QML objects and the bridge. */
