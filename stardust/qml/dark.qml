@@ -18,6 +18,8 @@ Window {
     property bool optimize: true
     property int period: 1
     property string amber: "#ffb340"
+    // Backlit text: a pale core over a saturated halo, so the letters stay sharp.
+    property string amberLit: "#ffe4b0"
     property string amberGlow: "#8cffb340"
 
     // Sweeps the light over the chrome until the tilt sensor drives it.
@@ -93,9 +95,9 @@ Window {
             verticalAlignment: "center"
             fontSize: 14
             bold: true
-            textColor: segment.selected ? app.amber : "#23262a"
+            textColor: segment.selected ? app.amberLit : "#23262a"
             textShadow: segment.selected ? "" : "#99ffffff"
-            textGlow: segment.selected ? 4 : 0
+            textGlow: segment.selected ? 3 : 0
             textGlowColor: app.amber
         }
     }
@@ -197,7 +199,7 @@ Window {
                         horizontalAlignment: "center"
                         fontSize: 52
                         bold: true
-                        textColor: app.amber
+                        textColor: app.amberLit
                         textGlow: 6
                         textGlowColor: app.amber
                     }
@@ -299,8 +301,8 @@ Window {
                     bold: true
                     horizontalAlignment: "center"
                     verticalAlignment: "center"
-                    textColor: app.amber
-                    textGlow: glass.pressed ? 8 : 5
+                    textColor: app.amberLit
+                    textGlow: glass.pressed ? 4 : 3
                     textGlowColor: app.amber
                 }
             }

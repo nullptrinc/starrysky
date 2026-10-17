@@ -479,8 +479,7 @@ const Renderer::Glyph *Renderer::glow_glyph(uint32_t codepoint, int pixel_size, 
 						sum += across[size_t(r) * W + col] * kernel[i + radius];
 					}
 				}
-				/* Blurring lowers the peak; lift it so thin strokes still glow. */
-				pixels[size_t(row) * W + col] = (unsigned char)std::lround(std::min(1.0f, sum * 1.6f) * 255);
+				pixels[size_t(row) * W + col] = (unsigned char)std::lround(std::min(1.0f, sum) * 255);
 			}
 		}
 		if (!glow_atlas_.place(W, H, pixels.data(), glyph)) {
@@ -544,11 +543,12 @@ void Renderer::text(float x, float y, const std::string &text, float size, bool 
 		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, vertices.data() + 2);
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 4);
 	};
-	/* Backlight: the text blurred once per glyph, drawn under it. */
+	/* Backlight: the text blurred once per glyph, drawn under it, fainter
+	 * than the letters so their edges stay readable. */
 	int radius = std::min(48, int(std::lround(style.glow * scale_)));
 	if (radius > 0 && style.glow_color.a > 0) {
 		Color tint = style.glow_color;
-		tint.a *= color.a;
+		tint.a *= color.a * 0.8f;
 		draw(layout_text(x, y, text, pixel_size, bold, [&](uint32_t c) {
 			return glow_glyph(c, pixel_size, bold, radius);
 		}), glow_atlas_.texture, tint, 0);
