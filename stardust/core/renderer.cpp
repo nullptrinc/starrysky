@@ -223,16 +223,8 @@ bool Renderer::init(const char *regular_font, const char *bold_font) {
 	text_color_ = glGetUniformLocation(text_program_, "u_color");
 	text_atlas_ = glGetUniformLocation(text_program_, "u_atlas");
 
-	glGenTextures(1, &atlas_);
-	glBindTexture(GL_TEXTURE_2D, atlas_);
-	std::vector<unsigned char> blank(atlas_size_ * atlas_size_);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, atlas_size_, atlas_size_, 0, GL_ALPHA,
-		GL_UNSIGNED_BYTE, blank.data());
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	atlas_.create();
+	glow_atlas_.create();
 	return true;
 }
 
@@ -362,6 +354,46 @@ void Renderer::set_size(bool bold, int pixel_size) {
 	}
 }
 
+void Renderer::Atlas::create() {
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	std::vector<unsigned char> blank(size * size);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, size, size, 0, GL_ALPHA, GL_UNSIGNED_BYTE,
+		blank.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+bool Renderer::Atlas::place(int w, int h, const unsigned char *pixels, Glyph &glyph) {
+	if (shelf_x + w + 1 > size) {
+		shelf_x = 0;
+		shelf_y += shelf_h + 1;
+		shelf_h = 0;
+	}
+	if (shelf_y + h + 1 > size || w + 1 > size) {
+		return false;
+	}
+	if (w > 0 && h > 0) {
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, shelf_x, shelf_y, w, h, GL_ALPHA, GL_UNSIGNED_BYTE,
+			pixels);
+	}
+	float s = size;
+	glyph.u0 = shelf_x / s;
+	glyph.v0 = shelf_y / s;
+	glyph.u1 = (shelf_x + w) / s;
+	glyph.v1 = (shelf_y + h) / s;
+	glyph.width = w;
+	glyph.height = h;
+	shelf_x += w + 1;
+	shelf_h = std::max(shelf_h, h);
+	return true;
+}
+
 const Renderer::Glyph *Renderer::glyph(uint32_t codepoint, int pixel_size, bool bold) {
 	auto key = std::make_tuple(codepoint, pixel_size, bold);
 	auto found = glyphs_.find(key);
@@ -375,37 +407,117 @@ const Renderer::Glyph *Renderer::glyph(uint32_t codepoint, int pixel_size, bool 
 	}
 	FT_Bitmap &bitmap = face->glyph->bitmap;
 	int w = bitmap.width, h = bitmap.rows;
-	/* Shelf packing; a full atlas starts over (fine for a demo-sized UI). */
-	if (shelf_x_ + w + 1 > atlas_size_) {
-		shelf_x_ = 0;
-		shelf_y_ += shelf_h_ + 1;
-		shelf_h_ = 0;
+	std::vector<unsigned char> rows(size_t(w) * h);
+	for (int row = 0; row < h; row++) {
+		std::copy_n(bitmap.buffer + row * bitmap.pitch, w, rows.begin() + size_t(row) * w);
 	}
-	if (shelf_y_ + h + 1 > atlas_size_) {
-		glyphs_.clear();
-		shelf_x_ = shelf_y_ = shelf_h_ = 0;
+	Glyph glyph{};
+	if (!atlas_.place(w, h, rows.data(), glyph)) {
+		glyphs_.clear(); /* a full atlas starts over; fine for a phone-sized UI */
+		atlas_.reset();
+		atlas_.place(w, h, rows.data(), glyph);
 	}
+	glyph.left = face->glyph->bitmap_left;
+	glyph.top = face->glyph->bitmap_top;
+	glyph.advance = face->glyph->advance.x / 64.0f;
+	return &(glyphs_[key] = glyph);
+}
+
+const Renderer::Glyph *Renderer::glow_glyph(uint32_t codepoint, int pixel_size, bool bold,
+		int radius) {
+	auto key = std::make_tuple(codepoint, pixel_size, bold, radius);
+	auto found = glow_glyphs_.find(key);
+	if (found != glow_glyphs_.end()) {
+		return &found->second;
+	}
+	set_size(bold, pixel_size);
+	FT_Face face = faces_[bold];
+	if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER)) {
+		return nullptr;
+	}
+	FT_Bitmap &bitmap = face->glyph->bitmap;
+	int w = bitmap.width, h = bitmap.rows;
+	Glyph glyph{};
+	glyph.advance = face->glyph->advance.x / 64.0f;
 	if (w > 0 && h > 0) {
-		std::vector<unsigned char> rows(w * h);
+		/* A separable Gaussian over the glyph padded by the radius. */
+		int pad = radius, W = w + 2 * pad, H = h + 2 * pad;
+		float sigma = std::max(1.0f, radius / 2.5f);
+		std::vector<float> kernel(2 * radius + 1);
+		float total = 0;
+		for (int i = -radius; i <= radius; i++) {
+			total += kernel[i + radius] = std::exp(-0.5f * i * i / (sigma * sigma));
+		}
+		for (float &k : kernel) {
+			k /= total;
+		}
+		std::vector<float> source(size_t(W) * H), across(size_t(W) * H);
 		for (int row = 0; row < h; row++) {
 			for (int col = 0; col < w; col++) {
-				rows[row * w + col] = bitmap.buffer[row * bitmap.pitch + col];
+				source[size_t(row + pad) * W + col + pad] = bitmap.buffer[row * bitmap.pitch + col] / 255.0f;
 			}
 		}
-		glBindTexture(GL_TEXTURE_2D, atlas_);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, shelf_x_, shelf_y_, w, h, GL_ALPHA,
-			GL_UNSIGNED_BYTE, rows.data());
+		for (int row = 0; row < H; row++) {
+			for (int col = 0; col < W; col++) {
+				float sum = 0;
+				for (int i = -radius; i <= radius; i++) {
+					int c = col + i;
+					if (c >= 0 && c < W) {
+						sum += source[size_t(row) * W + c] * kernel[i + radius];
+					}
+				}
+				across[size_t(row) * W + col] = sum;
+			}
+		}
+		std::vector<unsigned char> pixels(size_t(W) * H);
+		for (int row = 0; row < H; row++) {
+			for (int col = 0; col < W; col++) {
+				float sum = 0;
+				for (int i = -radius; i <= radius; i++) {
+					int r = row + i;
+					if (r >= 0 && r < H) {
+						sum += across[size_t(r) * W + col] * kernel[i + radius];
+					}
+				}
+				/* Blurring lowers the peak; lift it so thin strokes still glow. */
+				pixels[size_t(row) * W + col] = (unsigned char)std::lround(std::min(1.0f, sum * 1.6f) * 255);
+			}
+		}
+		if (!glow_atlas_.place(W, H, pixels.data(), glyph)) {
+			glow_glyphs_.clear();
+			glow_atlas_.reset();
+			glow_atlas_.place(W, H, pixels.data(), glyph);
+		}
+		glyph.left = face->glyph->bitmap_left - pad;
+		glyph.top = face->glyph->bitmap_top + pad;
 	}
-	float size = atlas_size_;
-	Glyph glyph = {
-		shelf_x_ / size, shelf_y_ / size, (shelf_x_ + w) / size, (shelf_y_ + h) / size,
-		w, h, face->glyph->bitmap_left, face->glyph->bitmap_top,
-		face->glyph->advance.x / 64.0f,
-	};
-	shelf_x_ += w + 1;
-	shelf_h_ = std::max(shelf_h_, h);
-	return &(glyphs_[key] = glyph);
+	return &(glow_glyphs_[key] = glyph);
+}
+
+template <typename Source>
+std::vector<float> Renderer::layout_text(float x, float y, const std::string &text,
+		int pixel_size, bool bold, Source source) {
+	set_size(bold, pixel_size);
+	float baseline = y * scale_ + faces_[bold]->size->metrics.ascender / 64.0f;
+	float pen = x * scale_;
+	std::vector<float> vertices;
+	for (const char *s = text.c_str(); *s;) {
+		const Glyph *g = source(next_codepoint(s));
+		if (!g) {
+			continue;
+		}
+		float x0 = std::round(pen) + g->left, y0 = std::round(baseline) - g->top;
+		float x1 = x0 + g->width, y1 = y0 + g->height;
+		if (g->width > 0 && g->height > 0) {
+			float quad[] = {
+				x0, y0, g->u0, g->v0, x1, y0, g->u1, g->v0, x0, y1, g->u0, g->v1,
+				x1, y0, g->u1, g->v0, x1, y1, g->u1, g->v1, x0, y1, g->u0, g->v1,
+			};
+			vertices.insert(vertices.end(), quad, quad + 24);
+		}
+		pen += g->advance;
+	}
+	return vertices;
 }
 
 void Renderer::text(float x, float y, const std::string &text, float size, bool bold,
@@ -414,58 +526,42 @@ void Renderer::text(float x, float y, const std::string &text, float size, bool 
 		return;
 	}
 	int pixel_size = std::lround(size * scale_);
-	set_size(bold, pixel_size);
-	float baseline = y * scale_ + faces_[bold]->size->metrics.ascender / 64.0f;
-	float pen = x * scale_;
-	std::vector<float> vertices;
-	for (const char *s = text.c_str(); *s;) {
-		const Glyph *g = glyph(next_codepoint(s), pixel_size, bold);
-		if (!g) {
-			continue;
-		}
-		float x0 = std::round(pen) + g->left, y0 = std::round(baseline) - g->top;
-		float x1 = x0 + g->width, y1 = y0 + g->height;
-		float quad[] = {
-			x0, y0, g->u0, g->v0, x1, y0, g->u1, g->v0, x0, y1, g->u0, g->v1,
-			x1, y0, g->u1, g->v0, x1, y1, g->u1, g->v1, x0, y1, g->u0, g->v1,
-		};
-		vertices.insert(vertices.end(), quad, quad + 24);
-		pen += g->advance;
-	}
 	glUseProgram(text_program_);
 	glUniform2f(text_screen_, width_px_, height_px_);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, atlas_);
 	glUniform1i(text_atlas_, 0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 16, vertices.data());
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, vertices.data() + 2);
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
-	auto pass = [&](Color tint, float dx, float dy) {
+	auto draw = [&](const std::vector<float> &vertices, GLuint texture, Color tint, float dy) {
+		if (vertices.empty()) {
+			return;
+		}
 		Color c = premultiplied(tint);
+		glBindTexture(GL_TEXTURE_2D, texture);
 		glUniform4f(text_color_, c.r, c.g, c.b, c.a);
-		glUniform2f(text_offset_, dx, dy);
+		glUniform2f(text_offset_, 0, dy);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 16, vertices.data());
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, vertices.data() + 2);
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 4);
 	};
-	/* A soft glow from faint copies on three rings, densest near the
-	 * letters; enough for backlit labels without a blur pass. */
-	if (style.glow > 0 && style.glow_color.a > 0) {
+	/* Backlight: the text blurred once per glyph, drawn under it. */
+	int radius = std::min(48, int(std::lround(style.glow * scale_)));
+	if (radius > 0 && style.glow_color.a > 0) {
 		Color tint = style.glow_color;
-		tint.a *= color.a * 0.07f;
-		for (float ring : {0.33f, 0.66f, 1.0f}) {
-			float r = style.glow * ring * scale_;
-			for (int i = 0; i < 12; i++) {
-				float a = i * 0.523599f + ring * 2;
-				pass(tint, std::cos(a) * r, std::sin(a) * r);
-			}
-		}
+		tint.a *= color.a;
+		draw(layout_text(x, y, text, pixel_size, bold, [&](uint32_t c) {
+			return glow_glyph(c, pixel_size, bold, radius);
+		}), glow_atlas_.texture, tint, 0);
 	}
+	std::vector<float> sharp = layout_text(x, y, text, pixel_size, bold, [&](uint32_t c) {
+		return glyph(c, pixel_size, bold);
+	});
 	if (style.shadow.a > 0) {
 		Color tint = style.shadow;
 		tint.a *= color.a;
-		pass(tint, 0, std::round(style.shadow_offset * scale_));
+		draw(sharp, atlas_.texture, tint, std::round(style.shadow_offset * scale_));
 	}
-	pass(color, 0, 0);
+	draw(sharp, atlas_.texture, color, 0);
 }
 
 float Renderer::text_width(const std::string &text, float size, bool bold) {

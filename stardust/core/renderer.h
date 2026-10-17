@@ -64,7 +64,22 @@ private:
 		int width, height, left, top;
 		float advance;
 	};
+	/* Shelf-packed alpha textures; a full one starts over. */
+	struct Atlas {
+		GLuint texture = 0;
+		int size = 1024, shelf_x = 0, shelf_y = 0, shelf_h = 0;
+		void create();
+		/* Uploads a w×h bitmap; false when it no longer fits (call reset first). */
+		bool place(int w, int h, const unsigned char *pixels, Glyph &glyph);
+		void reset() { shelf_x = shelf_y = shelf_h = 0; }
+	};
 	const Glyph *glyph(uint32_t codepoint, int pixel_size, bool bold);
+	/* The glyph blurred by a Gaussian of the given radius, for backlit text. */
+	const Glyph *glow_glyph(uint32_t codepoint, int pixel_size, bool bold, int radius);
+	/* Quads for a line of text from one of the glyph sources. */
+	template <typename Source>
+	std::vector<float> layout_text(float x, float y, const std::string &text, int pixel_size,
+		bool bold, Source source);
 	void set_size(bool bold, int pixel_size);
 
 	GLuint rect_program_ = 0, text_program_ = 0, material_program_ = 0;
@@ -76,9 +91,9 @@ private:
 			scale, alpha;
 	} material_;
 	float light_ = 3.5f;
-	GLuint atlas_ = 0;
-	int atlas_size_ = 1024, shelf_x_ = 0, shelf_y_ = 0, shelf_h_ = 0;
+	Atlas atlas_, glow_atlas_;
 	std::map<std::tuple<uint32_t, int, bool>, Glyph> glyphs_;
+	std::map<std::tuple<uint32_t, int, bool, int>, Glyph> glow_glyphs_;
 	FT_Library library_ = nullptr;
 	FT_Face faces_[2] = {nullptr, nullptr};
 	int face_size_[2] = {0, 0};
