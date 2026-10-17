@@ -125,15 +125,7 @@ Window {
         }
     }
 
-    // Status bar and the glass navigation bar.
-    Container {
-        layout: "dock"
-        preferredHeight: 28
-        background: "#000000"
-        padding: 6
-        Label { text: "12:40"; bold: true; fontSize: 14; horizontalAlignment: "start" }
-        Label { text: "98%"; bold: true; fontSize: 14; horizontalAlignment: "end" }
-    }
+    // The glass navigation bar; starboard draws the status bar above the app.
     Container {
         layout: "dock"
         preferredHeight: 52
