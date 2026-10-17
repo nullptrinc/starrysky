@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/signalfd.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -208,6 +211,36 @@ const char *sb_app_name_for_pid(struct starboard *sb, pid_t pid) {
 	return NULL;
 }
 
+/* Asks starry-launchd to start a command. Returns its pid, 0 when no
+ * launcher is running, or -1 when the launcher refused. */
+static pid_t launch_through_daemon(const char *command) {
+	const char *display = getenv("WAYLAND_DISPLAY");
+	int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+	struct sockaddr_un address = { .sun_family = AF_UNIX };
+	snprintf(address.sun_path, sizeof(address.sun_path), "%s", STARRY_LAUNCH_SOCKET);
+	if (fd < 0 || !display || connect(fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+		if (fd >= 0) {
+			close(fd);
+		}
+		return 0;
+	}
+	struct timeval timeout = { .tv_sec = 2 };
+	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+	char request[4096], reply[64] = "";
+	int length = snprintf(request, sizeof(request), "exec %s\n%s", display, command);
+	ssize_t received = -1;
+	if (length < (int)sizeof(request) && send(fd, request, (size_t)length, MSG_NOSIGNAL) == length) {
+		received = recv(fd, reply, sizeof(reply) - 1, 0);
+	}
+	close(fd);
+	int pid;
+	if (received > 0 && (reply[received] = 0, sscanf(reply, "pid %d", &pid) == 1) && pid > 0) {
+		return pid;
+	}
+	sb_log("starry-launchd refused %s: %s", command, received > 0 ? reply : "no answer");
+	return -1;
+}
+
 void sb_launch(struct starboard *sb, int index) {
 	struct sb_app *app = &sb->apps[index];
 	struct sb_scene *scene;
@@ -225,14 +258,18 @@ void sb_launch(struct starboard *sb, int index) {
 	if (app->pid) {
 		return; /* Started, but no window yet. */
 	}
-	pid_t pid = fork();
+	pid_t pid = launch_through_daemon(app->command);
 	if (pid == 0) {
-		sigset_t none;
-		sigemptyset(&none);
-		sigprocmask(SIG_SETMASK, &none, NULL);
-		setsid();
-		execl("/bin/sh", "/bin/sh", "-c", app->command, (char *)NULL);
-		_exit(127);
+		/* No starry-launchd (a development run): start it ourselves. */
+		pid = fork();
+		if (pid == 0) {
+			sigset_t none;
+			sigemptyset(&none);
+			sigprocmask(SIG_SETMASK, &none, NULL);
+			setsid();
+			execl("/bin/sh", "/bin/sh", "-c", app->command, (char *)NULL);
+			_exit(127);
+		}
 	}
 	if (pid > 0) {
 		app->pid = pid;

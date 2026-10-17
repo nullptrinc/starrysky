@@ -1,0 +1,3 @@
+# The AW8624 vibration motor goes to the haptics group, so starboard (user
+# starry) can play its tick without access to the touchscreen or keys.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="AW8624*", GROUP="haptics", MODE="0660"

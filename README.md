@@ -145,7 +145,15 @@ The log goes to `/run/starry.log`.
 
 Screenshots of the whole screen, as root: `starry-shot shot.ppm`, or a series
 with `starry-shot -n 20 -i 50 frame-%02d.ppm`. The compositor offers
-wlr-screencopy only to `starry-shot` run as root and to starboard.
+wlr-screencopy only to root clients and to starboard.
+
+With a `starry` user (in the groups `seat` and `haptics`), the service runs
+the compositor and starboard as that user. `seatd` hands them the display and
+input devices, so they never open `/dev/dri/card0`, `/dev/fb0` or the
+touchscreen themselves; `starry-launchd`, as root, starts apps for starboard
+and answers only the `starry` user. `data/udev/70-starry-haptics.rules` gives
+the vibration motor to `haptics`. Without that user, everything runs as root
+through `seatd-launch`.
 
 To start Starry at boot on a sysvinit system, link the bundled service and enable it:
 

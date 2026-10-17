@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
-#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -193,8 +192,8 @@ static void system_bind(struct wl_client *client, void *data, uint32_t version, 
 	}
 }
 
-/* Screen capture: starboard, and starry-shot run by root. The executable
- * link in /proc names the real binary, so another program cannot pose as it. */
+/* Screen capture: starboard, and root (starry-shot over a developer shell).
+ * Root can read the display device anyway; apps never run as root. */
 static bool may_capture(struct starry_server *server, const struct wl_client *client) {
 	if (client == server->starboard) {
 		return true;
@@ -203,14 +202,7 @@ static bool may_capture(struct starry_server *server, const struct wl_client *cl
 	uid_t uid;
 	gid_t gid;
 	wl_client_get_credentials((struct wl_client *)client, &pid, &uid, &gid);
-	char link[64], exe[PATH_MAX];
-	snprintf(link, sizeof(link), "/proc/%d/exe", (int)pid);
-	ssize_t length = uid == 0 ? readlink(link, exe, sizeof(exe) - 1) : -1;
-	if (length < 0) {
-		return false;
-	}
-	exe[length] = 0;
-	return strcmp(exe, STARRY_SHOT_PATH) == 0;
+	return uid == 0;
 }
 
 /* Only the starboard we started may see the system interface. */

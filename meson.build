@@ -10,7 +10,7 @@ prefix = get_option('prefix')
 plugin_dir = get_option('libdir') / 'starry' / 'plugins'
 add_project_arguments(
   '-DSTARRY_STARBOARD_PATH="@0@"'.format(prefix / get_option('bindir') / 'starboard'),
-  '-DSTARRY_SHOT_PATH="@0@"'.format(prefix / get_option('bindir') / 'starry-shot'),
+  '-DSTARRY_LAUNCH_SOCKET="/run/starry-launch.sock"',
   '-DSTARRY_PLUGIN_DIR="@0@"'.format(prefix / plugin_dir),
   '-DSTARRY_APPS_PATH="@0@"'.format(prefix / get_option('sysconfdir') / 'starry' / 'apps'),
   '-DSTARRY_DATA_DIR="@0@"'.format(prefix / get_option('datadir') / 'starry'),
@@ -75,6 +75,14 @@ executable('starboard',
   ],
   install_rpath: rpath,
   install: true)
+
+# Starts apps for starboard, which runs without root.
+executable('starry-launchd', 'launcher/starry-launchd.c',
+  install: true)
+
+# The vibration motor for starboard's haptic tick; other input stays closed.
+install_data('data/udev/70-starry-haptics.rules',
+  install_dir: get_option('datadir') / 'starry' / 'udev')
 
 # Screenshots of the whole screen, for root on the device.
 executable('starry-shot', 'tools/starry-shot.c', screencopy_code, screencopy_client,
