@@ -257,6 +257,14 @@ void SdApp::post(Mutation mutation) {
 	bridge_.post(std::move(mutation));
 }
 
+void SdApp::stop() {
+	live_ = false;
+	if (core_) core_->stop();
+	bridge_.on_event = {};
+	bridge_.wake_core = {};
+	core_.reset();
+}
+
 void SdApp::flush() {
 	flush_scheduled_ = false;
 	if (!batch_.empty()) {

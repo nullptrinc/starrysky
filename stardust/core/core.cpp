@@ -8,8 +8,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <future>
+#include <fcntl.h>
 #include <poll.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -37,6 +39,7 @@ struct Core::State {
 	CoreOptions options;
 	std::atomic<bool> running{true};
 	int wake_fd = -1;
+	int interrupt_fd = -1;
 
 	wl_display *display = nullptr;
 	wl_compositor *compositor = nullptr;
@@ -73,6 +76,7 @@ struct Core::State {
 	} touches[max_touch];
 
 	State(Bridge &bridge, CoreOptions options) : bridge(bridge), options(std::move(options)) {}
+	~State() { if (interrupt_fd >= 0) close(interrupt_fd); }
 
 	bool connect();
 	bool create_gl();
@@ -218,6 +222,10 @@ bool Core::State::connect() {
 		fprintf(stderr, "stardust: cannot connect to the compositor\n");
 		return false;
 	}
+	// Keep a private descriptor until after join: teardown may already have
+	// disconnected Wayland when stop() runs. Never interrupt a reused fd.
+	interrupt_fd = fcntl(wl_display_get_fd(display), F_DUPFD_CLOEXEC, 0);
+	if (interrupt_fd < 0) return false;
 	wl_registry *registry = wl_display_get_registry(display);
 	wl_registry_add_listener(registry, &registry_listener, this);
 	wl_display_roundtrip(display);
@@ -374,9 +382,10 @@ void Core::State::run() {
 			frame(); // blocks until the compositor wants the next frame
 			dirty = false;
 		}
+		if (!running) break;
 
 		while (wl_display_prepare_read(display) != 0) {
-			wl_display_dispatch_pending(display);
+			if (wl_display_dispatch_pending(display) < 0) return;
 		}
 		wl_display_flush(display);
 		pollfd fds[2] = {{wl_display_get_fd(display), POLLIN, 0}, {wake_fd, POLLIN, 0}};
@@ -466,6 +475,9 @@ void Core::stop() {
 		if (bridge_.wake_core) {
 			bridge_.wake_core();
 		}
+		// An occluded surface may be waiting inside EGL for a frame callback.
+		// eventfd cannot wake that wait; disconnect only our client at shutdown.
+		if (state_->interrupt_fd >= 0) shutdown(state_->interrupt_fd, SHUT_RDWR);
 		thread_.join();
 	}
 }

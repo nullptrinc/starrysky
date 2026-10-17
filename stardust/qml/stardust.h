@@ -187,6 +187,7 @@ class SdApp : public QObject {
 public:
 	static SdApp *instance();
 	bool start(SdWindow *window);
+	void stop();
 	void post(stardust::Mutation mutation);
 	bool live() const { return live_; }
 	/* Emits clicked on the first node with an onClicked handler. */
