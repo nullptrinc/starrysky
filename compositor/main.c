@@ -19,6 +19,7 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_touch.h>
@@ -633,6 +634,8 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&xdg_shell->events.new_popup, &server.new_popup);
 
 	server.seat = wlr_seat_create(server.display, "seat0");
+	/* Screenshots; the global filter in system.c decides who may see it. */
+	server.screencopy_global = wlr_screencopy_manager_v1_create(server.display)->global;
 	server.new_input.notify = new_input;
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
 	server.new_output.notify = new_output;

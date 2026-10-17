@@ -62,6 +62,7 @@ struct starry_server {
 
 	/* System shell (system.c) */
 	struct wl_global *system_global;
+	struct wl_global *screencopy_global; /* starboard and starry-shot only */
 	struct wl_client *starboard;
 	struct wl_resource *system;
 	struct wl_listener starboard_destroy;

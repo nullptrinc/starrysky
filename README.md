@@ -143,6 +143,10 @@ On the device, as root on a free VT:
 
 The log goes to `/run/starry.log`.
 
+Screenshots of the whole screen, as root: `starry-shot shot.ppm`, or a series
+with `starry-shot -n 20 -i 50 frame-%02d.ppm`. The compositor offers
+wlr-screencopy only to `starry-shot` run as root and to starboard.
+
 To start Starry at boot on a sysvinit system, link the bundled service and enable it:
 
 ```sh
