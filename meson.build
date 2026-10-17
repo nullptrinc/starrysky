@@ -78,6 +78,8 @@ executable('starboard',
 
 # Starts apps for starboard, which runs without root.
 executable('starry-launchd', 'launcher/starry-launchd.c',
+  dependencies: constellation_dep,
+  c_args: '-DSTARRY_BINDIR="@0@"'.format(prefix / get_option('bindir')),
   install: true)
 
 # The vibration motor for starboard's haptic tick; other input stays closed.

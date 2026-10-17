@@ -11,7 +11,8 @@
  *     sub PATH           subscribe; PATH may end in "/"           -> =ok, then events
  *     unsub PATH                                                  -> =ok
  *
- * Events are "!obj PATH\nATTRS" and "!none PATH". A subscriber that cannot
+ * Events are "!obj PATH\nATTRS" and "!none PATH". Only root may write the
+ * app registry (/blinks/apps/) and the battery (/blinks/power/battery). A subscriber that cannot
  * keep up is not queued every state: the broker remembers which objects it
  * still owes and sends their latest state once the socket drains.
  */
@@ -42,6 +43,7 @@ struct entry {
 struct client {
 	int fd;
 	pid_t pid;
+	uid_t uid;
 	bool dead;
 	char (*subscriptions)[CN_PATH_MAX];
 	int subscription_count;
@@ -213,10 +215,26 @@ static bool set_attr(struct cn_object *object, const struct cn_attr *attr) {
 	return true;
 }
 
+/* Objects that system services publish as root: the app registry, which
+ * tells starry-launchd what to run, and the battery. */
+static bool root_only(const char *path) {
+	static const char *const paths[] = { CN_NAMESPACE "apps/", CN_NAMESPACE "power/battery" };
+	for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+		if (matches(paths[i], path)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static void handle_set(struct client *client, const char *path, const char *attrs) {
 	struct cn_object update;
 	if (!cn_valid_path(path, false) || !cn_parse_attrs(attrs, &update)) {
 		reply_text(client, "=err invalid\n");
+		return;
+	}
+	if (client->uid != 0 && root_only(path)) {
+		reply_text(client, "=err denied\n");
 		return;
 	}
 	struct entry *entry = find_entry(path, NULL);
@@ -257,6 +275,10 @@ static void handle_del(struct client *client, const char *path) {
 	}
 	if (entry->owner && entry->owner != client) {
 		reply_text(client, "=err owned\n");
+		return;
+	}
+	if (client->uid != 0 && root_only(path)) {
+		reply_text(client, "=err denied\n");
 		return;
 	}
 	free(entry);
@@ -405,8 +427,9 @@ static void accept_client(int listener) {
 	}
 	struct ucred credentials;
 	socklen_t size = sizeof(credentials);
-	client->pid = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credentials, &size) == 0 ?
-		credentials.pid : -1;
+	bool known = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credentials, &size) == 0;
+	client->pid = known ? credentials.pid : -1;
+	client->uid = known ? credentials.uid : (uid_t)-1;
 	client->fd = fd;
 	clients[client_count++] = client;
 }

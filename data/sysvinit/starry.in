@@ -18,6 +18,8 @@ compositor=$bindir/starry-compositor
 pidfile=/run/starry.pid
 log=/run/starry.log
 export XDG_RUNTIME_DIR=/run/starry
+# App names on the home screen and in apps follow this.
+export LANG=${LANG:-ru_RU.UTF-8}
 
 running() {
 	[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null

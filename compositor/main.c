@@ -3,10 +3,12 @@
 #include <execinfo.h>
 #include <linux/input-event-codes.h>
 #include <math.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -652,6 +654,12 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	setenv("WAYLAND_DISPLAY", socket, true);
+	/* Apps run under their own uids; the runtime directory stays 0711. */
+	char socket_path[PATH_MAX];
+	snprintf(socket_path, sizeof(socket_path), "%s/%s", getenv("XDG_RUNTIME_DIR"), socket);
+	if (chmod(socket_path, 0666) < 0) {
+		wlr_log_errno(WLR_ERROR, "chmod %s", socket_path);
+	}
 	wlr_log(WLR_INFO, "Starry running on WAYLAND_DISPLAY=%s", socket);
 	system_spawn_starboard(&server);
 	wl_display_run(server.display);

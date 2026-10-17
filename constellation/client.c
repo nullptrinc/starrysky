@@ -164,7 +164,7 @@ static bool simple_request(struct cn_client *client, const char *verb, const cha
 		return false;
 	}
 	if (strncmp(client->buffer, "=ok", 3) != 0) {
-		errno = strstr(client->buffer, "owned") ? EPERM : EINVAL;
+		errno = strstr(client->buffer, "owned") || strstr(client->buffer, "denied") ? EPERM : EINVAL;
 		return false;
 	}
 	return true;
@@ -186,7 +186,7 @@ bool cn_publish(struct cn_client *client, const struct cn_object *object) {
 		return false;
 	}
 	if (strncmp(client->buffer, "=ok", 3) != 0) {
-		errno = strstr(client->buffer, "owned") ? EPERM : EINVAL;
+		errno = strstr(client->buffer, "owned") || strstr(client->buffer, "denied") ? EPERM : EINVAL;
 		return false;
 	}
 	return true;

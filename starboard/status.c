@@ -95,10 +95,15 @@ void status_load_plugins(struct starboard *sb, const char *directory) {
 
 static void blinks_changed(const struct cn_object *object, bool exists, void *data) {
 	struct starboard *sb = data;
-	battery_changed(&sb->battery, object, exists);
+	if (strncmp(object->path, CN_NAMESPACE "apps/", strlen(CN_NAMESPACE "apps/")) == 0) {
+		home_app_changed(sb, object, exists);
+	} else {
+		battery_changed(&sb->battery, object, exists);
+	}
 }
 
-/* Subscribes to /blinks/power/, or again after constellationd restarted. */
+/* Subscribes to /blinks/power/ and the app registry, or again after
+ * constellationd restarted. */
 static void blinks_connect(struct starboard *sb) {
 	if (sb->blinks && cn_fd(sb->blinks) < 0 && cn_reconnect(sb->blinks)) {
 		sb_log("Constellation is back");
@@ -107,7 +112,8 @@ static void blinks_connect(struct starboard *sb) {
 		return;
 	}
 	sb->blinks = cn_connect();
-	if (sb->blinks && !cn_subscribe(sb->blinks, CN_NAMESPACE "power/")) {
+	if (sb->blinks && (!cn_subscribe(sb->blinks, CN_NAMESPACE "power/") ||
+			!cn_subscribe(sb->blinks, CN_NAMESPACE "apps/"))) {
 		cn_disconnect(sb->blinks);
 		sb->blinks = NULL;
 	}

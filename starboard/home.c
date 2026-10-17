@@ -5,11 +5,13 @@
 #include <linux/input.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "canvas.h"
+#include "constellation.h"
 #include "starry-system-v1-client-protocol.h"
 #include "starboard.h"
 
@@ -50,9 +52,14 @@ static int dock_count(struct starboard *sb) {
 
 /* ---- catalogue and saved order (the IconState of this starboard) ---- */
 
-static int find_app(struct sb_app *apps, int count, const char *name) {
+/* The layout file names packages by id and catalogue lines by name. */
+static const char *app_key(const struct sb_app *app) {
+	return app->id[0] ? app->id : app->name;
+}
+
+static int find_app(struct sb_app *apps, int count, const char *key) {
 	for (int i = 0; i < count; i++) {
-		if (strcmp(apps[i].name, name) == 0) {
+		if (strcmp(app_key(&apps[i]), key) == 0) {
 			return i;
 		}
 	}
@@ -72,7 +79,7 @@ void home_load_apps(struct starboard *sb, const char *catalog, const char *layou
 			unsigned color;
 			int dock;
 			memset(app, 0, sizeof(*app));
-			if (line[0] == '#' || sscanf(line, "%31[^|]|#%6x|%d|%191[^\n]",
+			if (line[0] == '#' || sscanf(line, "%63[^|]|#%6x|%d|%191[^\n]",
 					app->name, &color, &dock, app->command) != 4) {
 				continue;
 			}
@@ -92,8 +99,13 @@ void home_load_apps(struct starboard *sb, const char *catalog, const char *layou
 	int docked = 0;
 	file = fopen(layout, "r");
 	if (file) {
-		char place[8], name[32];
-		while (fscanf(file, "%7s %31[^\n]\n", place, name) == 2) {
+		char place[8], name[SB_APP_ID_MAX];
+		while (fscanf(file, "%7s %128[^\n]\n", place, name) == 2) {
+			if (sb->place_count < (int)(sizeof(sb->places) / sizeof(sb->places[0]))) {
+				struct sb_place *saved = &sb->places[sb->place_count++];
+				snprintf(saved->key, sizeof(saved->key), "%s", name);
+				saved->dock = strcmp(place, "dock") == 0;
+			}
 			int index = find_app(apps, count, name);
 			if (index < 0 || used[index]) {
 				continue;
@@ -125,7 +137,7 @@ static void save_layout(struct starboard *sb) {
 		return;
 	}
 	for (int i = 0; i < sb->app_count; i++) {
-		fprintf(file, "%s %s\n", sb->apps[i].dock ? "dock" : "grid", sb->apps[i].name);
+		fprintf(file, "%s %s\n", sb->apps[i].dock ? "dock" : "grid", app_key(&sb->apps[i]));
 	}
 	fflush(file);
 	fsync(fileno(file));
@@ -261,9 +273,107 @@ void home_create(struct starboard *sb) {
 	wl_surface_commit(sb->home);
 }
 
-/* ---- motion: icons ease towards their slots on frame callbacks ---- */
+/* ---- installed apps, as the registry announces them ---- */
 
 static void home_schedule(struct starboard *sb);
+
+static void release_art(struct sb_app *app) {
+	struct canvas **art[] = { &app->icon_canvas, &app->lifted_canvas, &app->label_canvas };
+	for (size_t i = 0; i < sizeof(art) / sizeof(art[0]); i++) {
+		if (*art[i]) {
+			canvas_release(*art[i]);
+			*art[i] = NULL;
+		}
+	}
+}
+
+/* The display name for $LANG: "name.ru_RU", then "name.ru", then "name". */
+static const char *localized_name(const struct cn_object *object) {
+	const char *lang = getenv("LANG");
+	char key[CN_NAME_MAX];
+	if (lang && lang[0]) {
+		snprintf(key, sizeof(key), "name.%.*s", (int)strcspn(lang, ".@"), lang);
+		if (cn_get(object, key, NULL)) {
+			return cn_get(object, key, NULL);
+		}
+		key[strcspn(key, "_")] = 0;
+		if (cn_get(object, key, NULL)) {
+			return cn_get(object, key, NULL);
+		}
+	}
+	return cn_get(object, "name", NULL);
+}
+
+static void remove_app(struct starboard *sb, int index) {
+	struct sb_app *app = &sb->apps[index];
+	if (sb->dragging >= 0) {
+		sb->dragging = -1; /* the order is about to change under the finger */
+	}
+	sb_sprite_destroy(&app->icon);
+	sb_sprite_destroy(&app->label);
+	release_art(app);
+	memmove(&sb->apps[index], &sb->apps[index + 1],
+		(size_t)(sb->app_count - index - 1) * sizeof(*app));
+	sb->app_count--;
+	home_schedule(sb); /* the others ease into the gap */
+}
+
+void home_app_changed(struct starboard *sb, const struct cn_object *object, bool exists) {
+	const char *id = object->path + strlen(CN_NAMESPACE "apps/");
+	int index = find_app(sb->apps, sb->app_count, id);
+	if (!exists) {
+		if (index >= 0) {
+			sb_log("Removed %s", id);
+			remove_app(sb, index);
+		}
+		return;
+	}
+	const char *name = localized_name(object);
+	unsigned color = 0x5a6a80;
+	const char *hex = cn_get(object, "color", "");
+	if (!name || strlen(id) >= SB_APP_ID_MAX || !sb->home) {
+		return;
+	}
+	if (hex[0] == '#') {
+		sscanf(hex + 1, "%6x", &color);
+	}
+	if (index >= 0) {
+		struct sb_app *app = &sb->apps[index];
+		if (strcmp(app->name, name) == 0 && app->color == (0xff000000 | color)) {
+			return;
+		}
+		snprintf(app->name, sizeof(app->name), "%s", name);
+		app->color = 0xff000000 | color;
+		release_art(app);
+		draw_app(sb, app);
+		set_lifted(sb, app, false);
+		return;
+	}
+	if (sb->app_count >= SB_MAX_APPS) {
+		sb_log("No room for %s", id);
+		return;
+	}
+	struct sb_app *app = &sb->apps[sb->app_count];
+	memset(app, 0, sizeof(*app));
+	snprintf(app->id, sizeof(app->id), "%s", id);
+	snprintf(app->name, sizeof(app->name), "%s", name);
+	app->color = 0xff000000 | color;
+	for (int i = 0; i < sb->place_count; i++) {
+		if (strcmp(sb->places[i].key, id) == 0) {
+			app->dock = sb->places[i].dock && dock_count(sb) < DOCK_MAX;
+		}
+	}
+	int index_new = sb->app_count++;
+	draw_app(sb, app);
+	sb_sprite_init(sb, sb->home, &app->icon, app->icon_canvas);
+	sb_sprite_init(sb, sb->home, &app->label, app->dock ? NULL : app->label_canvas);
+	slot_position(sb, index_new, &app->x, &app->y);
+	place_app(app, false);
+	home_schedule(sb);
+	sb_log("Added %s (%s)", app->name, id);
+}
+
+/* ---- motion: icons ease towards their slots on frame callbacks ---- */
 
 static bool home_step(struct starboard *sb) {
 	uint32_t msec = sb_now_msec();

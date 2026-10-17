@@ -35,11 +35,14 @@ struct sb_sprite {
 	double x, y;
 };
 
+#define SB_APP_ID_MAX 129
+
 struct sb_app {
-	char name[32];
-	char command[192];
+	char name[64];
+	char command[192]; /* catalogue lines only */
 	uint32_t color;
 	bool dock;
+	char id[SB_APP_ID_MAX]; /* an installed package; empty for catalogue lines */
 	pid_t pid;
 	struct sb_sprite icon, label;
 	struct canvas *icon_canvas, *lifted_canvas, *label_canvas;
@@ -103,6 +106,9 @@ struct starboard {
 	struct sb_sprite done;
 	struct canvas *done_canvas;
 	struct sb_app apps[SB_MAX_APPS];
+	/* The saved order, for packages that announce themselves later. */
+	struct sb_place { char key[SB_APP_ID_MAX]; bool dock; } places[SB_MAX_APPS * 2];
+	int place_count;
 	int app_count;
 	bool editing;
 	int dragging;
@@ -166,6 +172,8 @@ void sb_launch(struct starboard *sb, int index);
 /* home.c */
 void home_load_apps(struct starboard *sb, const char *catalog, const char *layout);
 void home_create(struct starboard *sb);
+/* An installed app in /blinks/apps/ appeared, changed or went away. */
+void home_app_changed(struct starboard *sb, const struct cn_object *object, bool exists);
 void home_touch_down(struct starboard *sb, struct sb_touch *point);
 void home_touch_motion(struct starboard *sb, struct sb_touch *point);
 void home_touch_up(struct starboard *sb, struct sb_touch *point);

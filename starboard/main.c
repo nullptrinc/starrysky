@@ -109,25 +109,38 @@ static void command_program(const char *command, char *program, size_t size) {
 }
 
 /* After a starboard restart the windows already open belong to nobody;
- * recognise them by the program running in the window's process. */
+ * recognise them by the process: a package by its install directory in
+ * the arguments, a catalogue line by the program it runs. */
 static void adopt_scene(struct starboard *sb, struct sb_scene *scene) {
-	char path[64], argv0[256] = "";
+	char path[64], cmdline[1024] = "";
 	snprintf(path, sizeof(path), "/proc/%d/cmdline", scene->pid);
 	FILE *file = fopen(path, "r");
 	if (!file) {
 		return;
 	}
-	size_t length = fread(argv0, 1, sizeof(argv0) - 1, file);
+	size_t length = fread(cmdline, 1, sizeof(cmdline) - 1, file);
 	fclose(file);
-	argv0[length] = 0;
-	const char *base = strrchr(argv0, '/');
-	base = base ? base + 1 : argv0;
+	cmdline[length] = 0;
+	const char *base = strrchr(cmdline, '/');
+	base = base ? base + 1 : cmdline;
 	for (int i = 0; i < sb->app_count; i++) {
-		char program[64];
-		command_program(sb->apps[i].command, program, sizeof(program));
-		if (!sb->apps[i].pid && strcmp(program, base) == 0) {
-			sb->apps[i].pid = scene->pid;
-			sb_log("Adopted %s window of %d", sb->apps[i].name, scene->pid);
+		struct sb_app *app = &sb->apps[i];
+		bool match = false;
+		if (app->id[0]) {
+			char prefix[192];
+			snprintf(prefix, sizeof(prefix), "/data/cosmic/apps/%s/", app->id);
+			for (const char *arg = cmdline; arg < cmdline + length && !match;
+					arg += strlen(arg) + 1) {
+				match = strncmp(arg, prefix, strlen(prefix)) == 0;
+			}
+		} else {
+			char program[64];
+			command_program(app->command, program, sizeof(program));
+			match = strcmp(program, base) == 0;
+		}
+		if (!app->pid && match) {
+			app->pid = scene->pid;
+			sb_log("Adopted %s window of %d", app->name, scene->pid);
 			return;
 		}
 	}
@@ -211,9 +224,10 @@ const char *sb_app_name_for_pid(struct starboard *sb, pid_t pid) {
 	return NULL;
 }
 
-/* Asks starry-launchd to start a command. Returns its pid, 0 when no
- * launcher is running, or -1 when the launcher refused. */
-static pid_t launch_through_daemon(const char *command) {
+/* Asks starry-launchd to start an installed app ("app", by id) or a
+ * catalogue command ("exec"). Returns its pid, 0 when no launcher is
+ * running, or -1 when the launcher refused. */
+static pid_t launch_through_daemon(const char *verb, const char *argument) {
 	const char *display = getenv("WAYLAND_DISPLAY");
 	int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
 	struct sockaddr_un address = { .sun_family = AF_UNIX };
@@ -227,7 +241,7 @@ static pid_t launch_through_daemon(const char *command) {
 	struct timeval timeout = { .tv_sec = 2 };
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 	char request[4096], reply[64] = "";
-	int length = snprintf(request, sizeof(request), "exec %s\n%s", display, command);
+	int length = snprintf(request, sizeof(request), "%s %s\n%s", verb, display, argument);
 	ssize_t received = -1;
 	if (length < (int)sizeof(request) && send(fd, request, (size_t)length, MSG_NOSIGNAL) == length) {
 		received = recv(fd, reply, sizeof(reply) - 1, 0);
@@ -237,7 +251,7 @@ static pid_t launch_through_daemon(const char *command) {
 	if (received > 0 && (reply[received] = 0, sscanf(reply, "pid %d", &pid) == 1) && pid > 0) {
 		return pid;
 	}
-	sb_log("starry-launchd refused %s: %s", command, received > 0 ? reply : "no answer");
+	sb_log("starry-launchd refused %s: %s", argument, received > 0 ? reply : "no answer");
 	return -1;
 }
 
@@ -258,8 +272,11 @@ void sb_launch(struct starboard *sb, int index) {
 	if (app->pid) {
 		return; /* Started, but no window yet. */
 	}
-	pid_t pid = launch_through_daemon(app->command);
-	if (pid == 0) {
+	pid_t pid = launch_through_daemon(app->id[0] ? "app" : "exec",
+		app->id[0] ? app->id : app->command);
+	if (pid == 0 && app->id[0]) {
+		sb_log("Cannot start %s: no starry-launchd", app->id);
+	} else if (pid == 0) {
 		/* No starry-launchd (a development run): start it ourselves. */
 		pid = fork();
 		if (pid == 0) {
