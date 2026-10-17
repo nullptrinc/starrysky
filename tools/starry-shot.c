@@ -130,7 +130,7 @@ static void frame_ready(void *data, struct zwlr_screencopy_frame_v1 *frame,
 
 static void frame_failed(void *data, struct zwlr_screencopy_frame_v1 *frame) {
 	struct shot *shot = data;
-	fprintf(stderr, "starry-shot: the compositor could not copy the screen\n");
+	fprintf(stderr, "starry-shot: the compositor could not copy the screen (is it off?)\n");
 	shot->failed = shot->done = true;
 }
 

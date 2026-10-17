@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// The dark material set by hand: black glass, chrome, backlit amber.
+// The dark material set by hand: black glass, chrome, backlit in the accent.
 // Themes will provide these looks; this file shows what the core can draw.
 import Stardust 1.0
 
@@ -17,10 +17,6 @@ Window {
     property bool saver: false
     property bool optimize: true
     property int period: 1
-    property string amber: "#ffb340"
-    // Backlit text: a pale core over a saturated halo, so the letters stay sharp.
-    property string amberLit: "#ffe4b0"
-    property string amberGlow: "#8cffb340"
 
     // Sweeps the light over the chrome until the tilt sensor drives it.
     property Timer sweep: Timer {
@@ -38,11 +34,11 @@ Window {
         preferredHeight: 30
         radius: 15
         padding: 2
-        background: on ? "#2a1a00" : "#050506"
-        backgroundEnd: on ? "#4d3006" : "#1b1d21"
+        background: on ? Theme.accentDeep : "#050506"
+        backgroundEnd: on ? Theme.accentShade : "#1b1d21"
         innerShadow: 5
         innerGlow: on ? 10 : 0
-        glowColor: app.amberGlow
+        glowColor: Theme.accentGlow
         Container {
             preferredWidth: 26
             preferredHeight: 26
@@ -95,10 +91,37 @@ Window {
             verticalAlignment: "center"
             fontSize: 14
             bold: true
-            textColor: segment.selected ? app.amberLit : "#23262a"
+            textColor: segment.selected ? Theme.accentLit : "#23262a"
             textShadow: segment.selected ? "" : "#99ffffff"
             textGlow: segment.selected ? 3 : 0
-            textGlowColor: app.amber
+            textGlowColor: Theme.accent
+        }
+    }
+
+    // A lamp in a chrome bezel; picks the system accent.
+    component Swatch: Container {
+        id: swatch
+        property string color
+        property bool chosen: Theme.accent === swatch.color
+        layout: "dock"
+        preferredWidth: 42
+        preferredHeight: 42
+        radius: 21
+        padding: 6
+        background: "#ffffff"
+        material: "chrome"
+        shadow: 3
+        scale: swatch.pressed ? 0.92 : 1
+        onClicked: Theme.setAccent(swatch.color)
+        Container {
+            radius: 15
+            verticalAlignment: "fill"
+            background: swatch.color
+            backgroundEnd: "#000000"
+            gloss: 1
+            innerShadow: swatch.chosen ? 0 : 3
+            glow: swatch.chosen ? 8 : 0
+            glowColor: swatch.color
         }
     }
 
@@ -186,10 +209,10 @@ Window {
                     preferredHeight: 160
                     radius: 80
                     borderWidth: 3
-                    borderColor: app.amber
+                    borderColor: Theme.accent
                     glow: 6
                     innerGlow: 4
-                    glowColor: app.amberGlow
+                    glowColor: Theme.accentGlow
                 }
                 Container {
                     horizontalAlignment: "center"
@@ -199,9 +222,9 @@ Window {
                         horizontalAlignment: "center"
                         fontSize: 52
                         bold: true
-                        textColor: app.amberLit
+                        textColor: Theme.accentLit
                         textGlow: 6
-                        textGlowColor: app.amber
+                        textGlowColor: Theme.accent
                     }
                     Label {
                         text: "НЕ ЗАРЯЖАЕТСЯ"
@@ -238,6 +261,19 @@ Window {
                 text: "Температура"
                 Label { text: "28,3 °C"; fontSize: 14; textColor: "#8a9099"; horizontalAlignment: "end"; verticalAlignment: "center" }
             }
+        }
+
+        // The accent for the whole system; every app follows it.
+        Container {
+            orientation: "horizontal"
+            horizontalAlignment: "center"
+            spacing: 14
+            Swatch { color: "#ffb340" }
+            Swatch { color: "#4fc3ff" }
+            Swatch { color: "#4cd964" }
+            Swatch { color: "#ff4d4d" }
+            Swatch { color: "#b48cff" }
+            Swatch { color: "#f2f2f2" }
         }
 
         // Chrome segments; the chosen one sinks and lights up.
@@ -294,16 +330,16 @@ Window {
                 bevel: glass.pressed ? 0 : 1
                 innerShadow: glass.pressed ? 6 : 0
                 innerGlow: glass.pressed ? 12 : 3
-                glowColor: "#40ffb340"
+                glowColor: Theme.accentGlow
                 onClicked: console.log("calibrate")
                 Label {
                     text: "Калибровать"
                     bold: true
                     horizontalAlignment: "center"
                     verticalAlignment: "center"
-                    textColor: app.amberLit
+                    textColor: Theme.accentLit
                     textGlow: glass.pressed ? 4 : 3
-                    textGlowColor: app.amber
+                    textGlowColor: Theme.accent
                 }
             }
         }
