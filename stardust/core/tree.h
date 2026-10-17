@@ -23,7 +23,10 @@ struct Node {
 	NodeId parent = 0;
 	std::vector<NodeId> children;
 
-	Animated<Color> background;
+	Animated<Color> background, background_end, border_color, shadow_color, glow_color;
+	Animated<float> gloss, bevel, inner_shadow, shadow, glow, inner_glow, light;
+	float border_width = 0;
+	Surface surface = Surface::Plain;
 	float radius = 0;
 	Animated<float> opacity, scale, tx, ty;
 
@@ -32,6 +35,8 @@ struct Node {
 	Color text_color = Color::rgb(0xffffffff);
 	float font_size = 16;
 	bool bold = false;
+	Color text_shadow, text_glow_color;
+	float text_shadow_offset = 1, text_glow = 0;
 
 	Layout layout = Layout::Stack;
 	Orientation orientation = Orientation::TopToBottom;

@@ -56,6 +56,12 @@ float as_float(const Value &value) {
 	return 0;
 }
 
+void set_color(Node &node, Animated<Color> &property, const Value &value, double now) {
+	if (auto *color = std::get_if<Color>(&value)) {
+		set_animated(node, property, *color, now);
+	}
+}
+
 int as_int(const Value &value) {
 	if (auto *i = std::get_if<int>(&value)) {
 		return *i;
@@ -162,6 +168,27 @@ void Tree::apply(const Mutation &mutation, double now) {
 	case Prop::VerticalAlign: node->vertical = Align(as_int(value)); break;
 	case Prop::Animated: node->animated = as_int(value) != 0; break;
 	case Prop::Duration: node->duration_ms = as_float(value); break;
+	case Prop::BackgroundEnd: set_color(*node, node->background_end, value, now); break;
+	case Prop::BorderColor: set_color(*node, node->border_color, value, now); break;
+	case Prop::ShadowColor: set_color(*node, node->shadow_color, value, now); break;
+	case Prop::GlowColor: set_color(*node, node->glow_color, value, now); break;
+	case Prop::Gloss: set_animated(*node, node->gloss, as_float(value), now); break;
+	case Prop::Bevel: set_animated(*node, node->bevel, as_float(value), now); break;
+	case Prop::InnerShadow: set_animated(*node, node->inner_shadow, as_float(value), now); break;
+	case Prop::Shadow: set_animated(*node, node->shadow, as_float(value), now); break;
+	case Prop::Glow: set_animated(*node, node->glow, as_float(value), now); break;
+	case Prop::InnerGlow: set_animated(*node, node->inner_glow, as_float(value), now); break;
+	case Prop::LightAngle: set_animated(*node, node->light, as_float(value), now); break;
+	case Prop::BorderWidth: node->border_width = as_float(value); break;
+	case Prop::Material: node->surface = Surface(as_int(value)); break;
+	case Prop::TextShadowColor:
+		if (auto *color = std::get_if<Color>(&value)) node->text_shadow = *color;
+		break;
+	case Prop::TextShadowOffset: node->text_shadow_offset = as_float(value); break;
+	case Prop::TextGlow: node->text_glow = as_float(value); break;
+	case Prop::TextGlowColor:
+		if (auto *color = std::get_if<Color>(&value)) node->text_glow_color = *color;
+		break;
 	}
 }
 
@@ -173,6 +200,14 @@ bool Tree::step(double now) {
 		running |= advance(node.scale, now, node.duration_ms);
 		running |= advance(node.tx, now, node.duration_ms);
 		running |= advance(node.ty, now, node.duration_ms);
+		for (Animated<Color> *color : {&node.background_end, &node.border_color,
+				&node.shadow_color, &node.glow_color}) {
+			running |= advance(*color, now, node.duration_ms);
+		}
+		for (Animated<float> *value : {&node.gloss, &node.bevel, &node.inner_shadow,
+				&node.shadow, &node.glow, &node.inner_glow, &node.light}) {
+			running |= advance(*value, now, node.duration_ms);
+		}
 	}
 	return running;
 }

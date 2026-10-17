@@ -295,13 +295,30 @@ void Core::State::draw(NodeId id, float alpha, float k, float tx, float ty) {
 	k *= s;
 
 	float x = node->x * k + tx, y = node->y * k + ty;
-	Color background = node->background.value;
-	background.a *= alpha;
-	renderer.rect(x, y, node->width * k, node->height * k, node->radius * k, background);
+	Material material;
+	material.top = node->background.value;
+	material.bottom = node->background_end.value;
+	material.gloss = node->gloss.value;
+	material.border = node->border_width * k;
+	material.border_color = node->border_color.value;
+	material.bevel = node->bevel.value;
+	material.inner_shadow = node->inner_shadow.value * k;
+	material.shadow = node->shadow.value * k;
+	material.shadow_color = node->shadow_color.value;
+	material.glow = node->glow.value * k;
+	material.inner_glow = node->inner_glow.value * k;
+	material.glow_color = node->glow_color.value;
+	material.surface = node->surface;
+	renderer.rect(x, y, node->width * k, node->height * k, node->radius * k, material, alpha);
 	if (node->kind == Kind::Label) {
 		Color color = node->text_color;
 		color.a *= alpha;
-		renderer.text(x, y, node->text, node->font_size * k, node->bold, color);
+		TextStyle style;
+		style.shadow = node->text_shadow;
+		style.shadow_offset = node->text_shadow_offset * k;
+		style.glow = node->text_glow * k;
+		style.glow_color = node->text_glow_color;
+		renderer.text(x, y, node->text, node->font_size * k, node->bold, color, style);
 	}
 	if (node->kind == Kind::Plot) {
 		Color color = node->text_color;
@@ -321,6 +338,9 @@ void Core::State::frame() {
 	}
 	renderer.begin(width * scale, height * scale, scale);
 	tree.layout(width, height, renderer);
+	if (Node *root = tree.get(tree.root())) {
+		renderer.set_light(root->light.value * 0.0174533f);
+	}
 	draw(tree.root(), 1, 1, 0, 0);
 	tree.settle();
 	// Optional single client-surface capture for visual regression review.

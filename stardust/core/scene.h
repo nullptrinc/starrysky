@@ -40,7 +40,15 @@ enum class Prop : uint8_t {
 	PreferredWidth, PreferredHeight, HorizontalAlign, VerticalAlign,
 	Animated, // 0: changes apply at once
 	Duration, // implicit animation length, ms (default 250)
+	// Materials: a vertical gradient from Background to BackgroundEnd (when
+	// that is not transparent), then the effects below, all in logical px.
+	BackgroundEnd, Gloss, BorderWidth, BorderColor, Bevel, InnerShadow,
+	Shadow, ShadowColor, Glow, InnerGlow, GlowColor, Material,
+	TextShadowColor, TextShadowOffset, TextGlow, TextGlowColor,
+	LightAngle, // degrees; on the root node, lights every chrome surface
 };
+
+enum class Surface : uint8_t { Plain, Brushed, Chrome };
 
 using Value = std::variant<float, Color, std::string, int, std::vector<float>>;
 

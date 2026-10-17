@@ -42,6 +42,19 @@ class SdNode : public QObject, public QQmlParserStatus {
 	Q_PROPERTY(int duration MEMBER duration_ NOTIFY durationChanged)
 	Q_PROPERTY(bool pressed READ pressed NOTIFY pressedChanged)
 	Q_PROPERTY(QQmlListProperty<SdNode> nodes READ nodes)
+	/* Materials: background runs to backgroundEnd as a vertical gradient. */
+	Q_PROPERTY(QString backgroundEnd MEMBER background_end_ NOTIFY backgroundEndChanged)
+	Q_PROPERTY(qreal gloss MEMBER gloss_ NOTIFY glossChanged)
+	Q_PROPERTY(qreal borderWidth MEMBER border_width_ NOTIFY borderWidthChanged)
+	Q_PROPERTY(QString borderColor MEMBER border_color_ NOTIFY borderColorChanged)
+	Q_PROPERTY(qreal bevel MEMBER bevel_ NOTIFY bevelChanged)
+	Q_PROPERTY(qreal innerShadow MEMBER inner_shadow_ NOTIFY innerShadowChanged)
+	Q_PROPERTY(qreal shadow MEMBER shadow_ NOTIFY shadowChanged)
+	Q_PROPERTY(QString shadowColor MEMBER shadow_color_ NOTIFY shadowColorChanged)
+	Q_PROPERTY(qreal glow MEMBER glow_ NOTIFY glowChanged)
+	Q_PROPERTY(qreal innerGlow MEMBER inner_glow_ NOTIFY innerGlowChanged)
+	Q_PROPERTY(QString glowColor MEMBER glow_color_ NOTIFY glowColorChanged)
+	Q_PROPERTY(QString material MEMBER material_ NOTIFY materialChanged)
 
 public:
 	explicit SdNode(QObject *parent = nullptr);
@@ -79,6 +92,18 @@ signals:
 	void durationChanged();
 	void pressedChanged(); /* also the way to react to touch down and up */
 	void clicked();
+	void backgroundEndChanged();
+	void glossChanged();
+	void borderWidthChanged();
+	void borderColorChanged();
+	void bevelChanged();
+	void innerShadowChanged();
+	void shadowChanged();
+	void shadowColorChanged();
+	void glowChanged();
+	void innerGlowChanged();
+	void glowColorChanged();
+	void materialChanged();
 
 private slots:
 	void propertyChanged();
@@ -96,6 +121,11 @@ private:
 	bool animated_ = true;
 	int duration_ = 250;
 	bool pressed_ = false;
+	QString background_end_, border_color_, glow_color_;
+	QString shadow_color_ = QStringLiteral("#cc000000");
+	QString material_ = QStringLiteral("plain");
+	qreal gloss_ = 0, border_width_ = 0, bevel_ = 0, inner_shadow_ = 0, shadow_ = 0;
+	qreal glow_ = 0, inner_glow_ = 0;
 	QList<SdNode *> children_;
 	SdNode *parent_node_ = nullptr;
 };
@@ -106,6 +136,10 @@ class SdLabel : public SdNode {
 	Q_PROPERTY(QString textColor MEMBER text_color_ NOTIFY textColorChanged)
 	Q_PROPERTY(qreal fontSize MEMBER font_size_ NOTIFY fontSizeChanged)
 	Q_PROPERTY(bool bold MEMBER bold_ NOTIFY boldChanged)
+	Q_PROPERTY(QString textShadow MEMBER text_shadow_ NOTIFY textShadowChanged)
+	Q_PROPERTY(qreal textShadowOffset MEMBER text_shadow_offset_ NOTIFY textShadowOffsetChanged)
+	Q_PROPERTY(qreal textGlow MEMBER text_glow_ NOTIFY textGlowChanged)
+	Q_PROPERTY(QString textGlowColor MEMBER text_glow_color_ NOTIFY textGlowColorChanged)
 
 public:
 	using SdNode::SdNode;
@@ -116,8 +150,14 @@ signals:
 	void textColorChanged();
 	void fontSizeChanged();
 	void boldChanged();
+	void textShadowChanged();
+	void textShadowOffsetChanged();
+	void textGlowChanged();
+	void textGlowColorChanged();
 
 private:
+	QString text_shadow_, text_glow_color_;
+	qreal text_shadow_offset_ = 1, text_glow_ = 0;
 	QString text_, text_color_ = QStringLiteral("#ffffff");
 	qreal font_size_ = 16;
 	bool bold_ = false;
@@ -144,14 +184,18 @@ class SdWindow : public SdNode {
 	Q_OBJECT
 	Q_PROPERTY(QString title MEMBER title_ NOTIFY titleChanged)
 	Q_PROPERTY(QString appId MEMBER app_id_ NOTIFY appIdChanged)
+	/* Where chrome surfaces see the light, in degrees; the tilt will drive it. */
+	Q_PROPERTY(qreal lightAngle MEMBER light_angle_ NOTIFY lightAngleChanged)
 
 public:
 	using SdNode::SdNode;
 	QString title_ = QStringLiteral("Starry"), app_id_ = QStringLiteral("stardust");
+	qreal light_angle_ = 200;
 
 signals:
 	void titleChanged();
 	void appIdChanged();
+	void lightAngleChanged();
 };
 
 /* A repeating or one-shot timer, so apps need no extra QML modules. */

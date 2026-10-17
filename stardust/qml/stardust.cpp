@@ -50,7 +50,7 @@ bool convert(const char *name, const QVariant &value, Prop &prop, Value &out) {
 	struct Entry {
 		const char *name;
 		Prop prop;
-		enum { Float, Int, Bool, Color, Text, LayoutKind, Direction, Alignment } type;
+		enum { Float, Int, Bool, Color, Text, LayoutKind, Direction, Alignment, SurfaceKind } type;
 	};
 	static const Entry entries[] = {
 		{"background", Prop::Background, Entry::Color},
@@ -73,6 +73,23 @@ bool convert(const char *name, const QVariant &value, Prop &prop, Value &out) {
 		{"textColor", Prop::TextColor, Entry::Color},
 		{"fontSize", Prop::FontSize, Entry::Float},
 		{"bold", Prop::Bold, Entry::Bool},
+		{"backgroundEnd", Prop::BackgroundEnd, Entry::Color},
+		{"gloss", Prop::Gloss, Entry::Float},
+		{"borderWidth", Prop::BorderWidth, Entry::Float},
+		{"borderColor", Prop::BorderColor, Entry::Color},
+		{"bevel", Prop::Bevel, Entry::Float},
+		{"innerShadow", Prop::InnerShadow, Entry::Float},
+		{"shadow", Prop::Shadow, Entry::Float},
+		{"shadowColor", Prop::ShadowColor, Entry::Color},
+		{"glow", Prop::Glow, Entry::Float},
+		{"innerGlow", Prop::InnerGlow, Entry::Float},
+		{"glowColor", Prop::GlowColor, Entry::Color},
+		{"material", Prop::Material, Entry::SurfaceKind},
+		{"textShadow", Prop::TextShadowColor, Entry::Color},
+		{"textShadowOffset", Prop::TextShadowOffset, Entry::Float},
+		{"textGlow", Prop::TextGlow, Entry::Float},
+		{"textGlowColor", Prop::TextGlowColor, Entry::Color},
+		{"lightAngle", Prop::LightAngle, Entry::Float},
 	};
 	for (const Entry &entry : entries) {
 		if (qstrcmp(entry.name, name) != 0) {
@@ -89,6 +106,9 @@ bool convert(const char *name, const QVariant &value, Prop &prop, Value &out) {
 		case Entry::Direction: out = parse_enum(value.toString(), {"vertical", "horizontal"}); break;
 		case Entry::Alignment:
 			out = parse_enum(value.toString(), {"fill", "start", "center", "end"});
+			break;
+		case Entry::SurfaceKind:
+			out = parse_enum(value.toString(), {"plain", "brushed", "chrome"});
 			break;
 		}
 		return true;
