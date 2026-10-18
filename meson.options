@@ -1,1 +1,0 @@
-option('stardust', type: 'boolean', value: true, description: 'Build Stardust, the application framework')

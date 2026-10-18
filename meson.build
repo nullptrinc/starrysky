@@ -55,7 +55,8 @@ executable('starry-compositor',
   install_rpath: rpath,
   install: true)
 
-subdir('constellation')
+# starboard and starry-launchd talk to the Constellation broker.
+constellation_dep = dependency('constellation')
 
 nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
   dependencies: math,
@@ -108,9 +109,6 @@ shared_module('wifi', 'plugins/wifi.c',
   install: true,
   install_dir: plugin_dir)
 
-if get_option('stardust')
-  subdir('stardust')
-endif
 
 install_data('data/icons/battery.svg', 'data/icons/battery.map',
   install_dir: get_option('datadir') / 'starry' / 'icons')
