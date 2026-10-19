@@ -97,6 +97,8 @@ static void blinks_changed(const struct cn_object *object, bool exists, void *da
 	struct starboard *sb = data;
 	if (strncmp(object->path, CN_NAMESPACE "apps/", strlen(CN_NAMESPACE "apps/")) == 0) {
 		home_app_changed(sb, object, exists);
+	} else if (strcmp(object->path, CN_NAMESPACE "system/appearance") == 0) {
+		home_appearance_changed(sb, object, exists);
 	} else {
 		battery_changed(&sb->battery, object, exists);
 	}
@@ -113,7 +115,8 @@ static void blinks_connect(struct starboard *sb) {
 	}
 	sb->blinks = cn_connect();
 	if (sb->blinks && (!cn_subscribe(sb->blinks, CN_NAMESPACE "power/") ||
-			!cn_subscribe(sb->blinks, CN_NAMESPACE "apps/"))) {
+			!cn_subscribe(sb->blinks, CN_NAMESPACE "apps/") ||
+			!cn_subscribe(sb->blinks, CN_NAMESPACE "system/appearance"))) {
 		cn_disconnect(sb->blinks);
 		sb->blinks = NULL;
 	}

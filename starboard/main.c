@@ -475,7 +475,7 @@ int main(void) {
 	signal(SIGSEGV, crash_handler);
 	signal(SIGABRT, crash_handler);
 	signal(SIGBUS, crash_handler);
-	struct starboard sb = { .running = true };
+	struct starboard sb = { .running = true, .accent = SB_DEFAULT_ACCENT };
 	wl_list_init(&sb.scenes);
 
 	sb.display = wl_display_connect(NULL);

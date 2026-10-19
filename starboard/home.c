@@ -189,11 +189,34 @@ static bool in_done_button(struct starboard *sb, double x, double y) {
 
 /* ---- drawing ---- */
 
+/* The package icon for the current appearance, decoded once per file.
+ * Missing appearances fall back to the default one. */
+static const uint8_t *package_icon(struct starboard *sb, struct sb_app *app) {
+	const char *path = app->icons[sb->icon_style][0] ? app->icons[sb->icon_style] : app->icons[0];
+	if (!path[0]) {
+		return NULL;
+	}
+	if (!app->image || strcmp(app->image_path, path) != 0) {
+		free(app->image);
+		app->image = icon_load(path, &app->image_width, &app->image_height);
+		snprintf(app->image_path, sizeof(app->image_path), "%s", app->image ? path : "");
+	}
+	return app->image;
+}
+
 static void draw_app(struct starboard *sb, struct sb_app *app) {
 	const double s = SB_SCALE;
+	const uint8_t *image = package_icon(sb, app);
 	for (int lifted = 0; lifted < 2; lifted++) {
 		double size = (ICON + (lifted ? 2 * LIFT : 0)) * s;
 		struct canvas *icon = canvas_create(sb->shm, size, size);
+		if (image) {
+			icon_draw(icon, image, app->image_width, app->image_height, (int)size,
+				sb->icon_style == SB_ICONS_TINTED, sb->accent);
+			*(lifted ? &app->lifted_canvas : &app->icon_canvas) = icon;
+			continue;
+		}
+		/* No icon of its own: a tile of its colour with its initial. */
 		canvas_round_rect(icon, 0, 0, size, size, size * 14 / ICON, app->color);
 		/* Soft top highlight gives the flat colour some depth. */
 		canvas_round_rect(icon, 0, 0, size, size / 2, size * 14 / ICON, 0x1affffff);
@@ -312,6 +335,7 @@ static void remove_app(struct starboard *sb, int index) {
 	sb_sprite_destroy(&app->icon);
 	sb_sprite_destroy(&app->label);
 	release_art(app);
+	free(app->image);
 	memmove(&sb->apps[index], &sb->apps[index + 1],
 		(size_t)(sb->app_count - index - 1) * sizeof(*app));
 	sb->app_count--;
@@ -329,6 +353,11 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 		return;
 	}
 	const char *name = localized_name(object);
+	char icons[SB_ICON_STYLES][192];
+	static const char *const keys[SB_ICON_STYLES] = { "icon", "icon.dark", "icon.tinted", "icon.clear" };
+	for (int i = 0; i < SB_ICON_STYLES; i++) {
+		snprintf(icons[i], sizeof(icons[i]), "%s", cn_get(object, keys[i], ""));
+	}
 	unsigned color = 0x5a6a80;
 	const char *hex = cn_get(object, "color", "");
 	if (!name || strlen(id) >= SB_APP_ID_MAX || !sb->home) {
@@ -339,11 +368,13 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 	}
 	if (index >= 0) {
 		struct sb_app *app = &sb->apps[index];
-		if (strcmp(app->name, name) == 0 && app->color == (0xff000000 | color)) {
+		if (strcmp(app->name, name) == 0 && app->color == (0xff000000 | color) &&
+				memcmp(app->icons, icons, sizeof(icons)) == 0) {
 			return;
 		}
 		snprintf(app->name, sizeof(app->name), "%s", name);
 		app->color = 0xff000000 | color;
+		memcpy(app->icons, icons, sizeof(icons));
 		release_art(app);
 		draw_app(sb, app);
 		set_lifted(sb, app, false);
@@ -358,6 +389,7 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 	snprintf(app->id, sizeof(app->id), "%s", id);
 	snprintf(app->name, sizeof(app->name), "%s", name);
 	app->color = 0xff000000 | color;
+	memcpy(app->icons, icons, sizeof(icons));
 	for (int i = 0; i < sb->place_count; i++) {
 		if (strcmp(sb->places[i].key, id) == 0) {
 			app->dock = sb->places[i].dock && dock_count(sb) < DOCK_MAX;
@@ -371,6 +403,42 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 	place_app(app, false);
 	home_schedule(sb);
 	sb_log("Added %s (%s)", app->name, id);
+}
+
+void home_appearance_changed(struct starboard *sb, const struct cn_object *object, bool exists) {
+	static const char *const styles[SB_ICON_STYLES] = { "default", "dark", "tinted", "clear" };
+	const char *style = exists ? cn_get(object, "icons", "default") : "default";
+	enum sb_icon_style icon_style = SB_ICONS_DEFAULT;
+	for (int i = 0; i < SB_ICON_STYLES; i++) {
+		if (strcmp(style, styles[i]) == 0) {
+			icon_style = (enum sb_icon_style)i;
+		}
+	}
+	unsigned accent = SB_DEFAULT_ACCENT;
+	const char *hex = exists ? cn_get(object, "accent", "") : "";
+	if (hex[0] == '#') {
+		sscanf(hex + 1, "%6x", &accent);
+	}
+	bool tinted = icon_style == SB_ICONS_TINTED;
+	if (icon_style == sb->icon_style && (!tinted || accent == sb->accent)) {
+		sb->accent = accent;
+		return;
+	}
+	sb->icon_style = icon_style;
+	sb->accent = accent;
+	if (!sb->home) {
+		return;
+	}
+	/* Redraw the packages' icons; tiles of catalogue apps do not change. */
+	for (int i = 0; i < sb->app_count; i++) {
+		struct sb_app *app = &sb->apps[i];
+		if (app->icons[0][0] && i != sb->dragging) {
+			release_art(app);
+			draw_app(sb, app);
+			set_lifted(sb, app, false);
+		}
+	}
+	sb_log("Icons: %s", styles[icon_style]);
 }
 
 /* ---- motion: icons ease towards their slots on frame callbacks ---- */

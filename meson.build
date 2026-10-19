@@ -64,11 +64,12 @@ nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
 
 executable('starboard',
   'starboard/main.c', 'starboard/home.c', 'starboard/status.c', 'starboard/switcher.c',
-  'starboard/canvas.c', 'starboard/battery.c', protocol_code, protocol_client,
+  'starboard/canvas.c', 'starboard/battery.c', 'starboard/icons.c', protocol_code, protocol_client,
   link_with: nanosvg,
   include_directories: plugin_include,
   dependencies: [
     constellation_dep,
+    dependency('libpng'),
     dependency('wayland-client'),
     dependency('freetype2'),
     cc.find_library('dl', required: false),

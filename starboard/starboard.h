@@ -36,6 +36,9 @@ struct sb_sprite {
 };
 
 #define SB_APP_ID_MAX 129
+#define SB_ICON_STYLES 4
+#define SB_DEFAULT_ACCENT 0xffb340 /* Stardust's Theme uses the same */
+enum sb_icon_style { SB_ICONS_DEFAULT, SB_ICONS_DARK, SB_ICONS_TINTED, SB_ICONS_CLEAR };
 
 struct sb_app {
 	char name[64];
@@ -43,6 +46,10 @@ struct sb_app {
 	uint32_t color;
 	bool dock;
 	char id[SB_APP_ID_MAX]; /* an installed package; empty for catalogue lines */
+	char icons[SB_ICON_STYLES][192]; /* PNG per appearance (default, dark, tinted, clear) */
+	uint8_t *image; /* the decoded icon in use, and which file it came from */
+	int image_width, image_height;
+	char image_path[192];
 	pid_t pid;
 	struct sb_sprite icon, label;
 	struct canvas *icon_canvas, *lifted_canvas, *label_canvas;
@@ -109,6 +116,9 @@ struct starboard {
 	/* The saved order, for packages that announce themselves later. */
 	struct sb_place { char key[SB_APP_ID_MAX]; bool dock; } places[SB_MAX_APPS * 2];
 	int place_count;
+	/* /blinks/system/appearance: which icons to show and the accent to tint them */
+	enum sb_icon_style icon_style;
+	uint32_t accent;
 	int app_count;
 	bool editing;
 	int dragging;
@@ -174,6 +184,14 @@ void home_load_apps(struct starboard *sb, const char *catalog, const char *layou
 void home_create(struct starboard *sb);
 /* An installed app in /blinks/apps/ appeared, changed or went away. */
 void home_app_changed(struct starboard *sb, const struct cn_object *object, bool exists);
+/* The system appearance changed: icon style or accent. */
+void home_appearance_changed(struct starboard *sb, const struct cn_object *object, bool exists);
+
+/* icons.c */
+uint8_t *icon_load(const char *path, int *width, int *height);
+/* Scales the icon into the canvas's top-left size×size square. */
+void icon_draw(struct canvas *canvas, const uint8_t *rgba, int width, int height, int size,
+	bool tint, uint32_t accent);
 void home_touch_down(struct starboard *sb, struct sb_touch *point);
 void home_touch_motion(struct starboard *sb, struct sb_touch *point);
 void home_touch_up(struct starboard *sb, struct sb_touch *point);
