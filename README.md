@@ -102,7 +102,7 @@ update-rc.d starry defaults 99 20
 ```
 
 The app catalogue lives in `<prefix>/etc/starry/apps`, one app per line
-(`Name|#RRGGBB|dock(0/1)|shell command`). Without it, a demo set of Weston clients is used.
+(`Name|#RRGGBB|dock(0/1)|shell command`), for development; installed packages come from cosmic.
 
 Environment overrides: `STARRY_STARBOARD` (starboard binary), `STARRY_APPS`,
 `STARRY_PLUGIN_DIR`, `STARRY_DEBUG` (verbose wlroots log).

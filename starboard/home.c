@@ -29,16 +29,6 @@
 #define TAP_SLOP 12
 #define LAYOUT_DIR "/var/lib/starry"
 
-static const struct sb_app default_apps[] = {
-	{ "Terminal", "exec weston-terminal", 0xff30343b, true },
-	{ "Flower", "exec weston-flower", 0xffeb5757, true },
-	{ "Touch", "exec weston-simple-touch", 0xff27ae60, true },
-	{ "EGL", "exec weston-simple-egl", 0xff9b51e0, false },
-	{ "Smoke", "exec weston-smoke", 0xff56ccf2, false },
-	{ "Clickdot", "exec weston-clickdot", 0xfff2994a, false },
-	{ "Image", "exec weston-image /usr/share/weston/background.png", 0xff219653, false },
-	{ "Gears", "exec weston-simple-dmabuf-egl", 0xff6fcf97, false },
-};
 
 static const char *layout_path = LAYOUT_DIR "/layout";
 
@@ -66,7 +56,9 @@ static int find_app(struct sb_app *apps, int count, const char *key) {
 	return -1;
 }
 
-/* Catalogue: one app per line, Name|#RRGGBB|dock(0/1)|shell command.
+/* Catalogue (optional, for development): one app per line,
+ * Name|#RRGGBB|dock(0/1)|shell command. Installed packages come from the
+ * registry instead.
  * Layout: "dock Name" or "grid Name" per line, in display order. */
 void home_load_apps(struct starboard *sb, const char *catalog, const char *layout) {
 	struct sb_app apps[SB_MAX_APPS];
@@ -88,10 +80,6 @@ void home_load_apps(struct starboard *sb, const char *catalog, const char *layou
 			count++;
 		}
 		fclose(file);
-	}
-	if (count == 0) {
-		count = sizeof(default_apps) / sizeof(default_apps[0]);
-		memcpy(apps, default_apps, sizeof(default_apps));
 	}
 
 	sb->app_count = 0;
