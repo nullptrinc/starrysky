@@ -378,6 +378,7 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 		release_art(app);
 		draw_app(sb, app);
 		set_lifted(sb, app, false);
+		wl_surface_commit(sb->home); /* icons are synced subsurfaces of home */
 		return;
 	}
 	if (sb->app_count >= SB_MAX_APPS) {
@@ -438,6 +439,9 @@ void home_appearance_changed(struct starboard *sb, const struct cn_object *objec
 			set_lifted(sb, app, false);
 		}
 	}
+	/* Icons are synchronized subsurfaces: their new buffers show only
+	 * with a commit of the home surface itself. */
+	wl_surface_commit(sb->home);
 	sb_log("Icons: %s", styles[icon_style]);
 }
 
