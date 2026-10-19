@@ -44,17 +44,29 @@ void icon_draw(struct canvas *canvas, const uint8_t *rgba, int width, int height
 	if (!out) {
 		return;
 	}
-	/* The tinted appearance is drawn dim; stretch its brightest part to full. */
+	/* The tinted appearance is drawn dim. Stretch it so its 97th percentile of
+	 * brightness becomes full: the very brightest pixels are the thin glass
+	 * rim, and stretching to them would leave the glyph itself dark. */
 	double brightest = 1;
 	if (tint) {
-		brightest = 0;
+		unsigned histogram[256] = { 0 }, opaque = 0;
 		for (size_t i = 0; i < (size_t)width * height; i++) {
 			const uint8_t *p = rgba + i * 4;
 			if (p[3] > 128) {
-				brightest = fmax(brightest, (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / 255);
+				histogram[(int)lround(0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2])]++;
+				opaque++;
 			}
 		}
-		brightest = brightest > 0.05 ? brightest : 1;
+		unsigned below = 0;
+		int level = 255;
+		for (int i = 0; i < 256; i++) {
+			below += histogram[i];
+			if (below >= opaque * 97 / 100) {
+				level = i;
+				break;
+			}
+		}
+		brightest = level >= 13 ? level / 255.0 : 1;
 	}
 	double sx = (double)width / size, sy = (double)height / size;
 	float tint_rgb[3] = { (accent >> 16 & 0xff) / 255.0f, (accent >> 8 & 0xff) / 255.0f,
