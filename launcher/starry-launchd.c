@@ -6,14 +6,18 @@
  *
  *     app DISPLAY\nID        ->  pid N   |  err REASON
  *     exec DISPLAY\nCOMMAND  ->  pid N   |  err REASON
+ *     stop DISPLAY\nPID      ->  pid N   |  err REASON
  *
  * "app" starts an installed package under its own uid, with its data
  * directory as home. What to run comes from the app registry in
  * Constellation (/blinks/apps/ID), which only root can write, and must lie
  * inside the app's install directory. "exec" runs a catalogue line by
- * /bin/sh as root, as starboard did before packages existed.
+ * /bin/sh as root, as starboard did before packages existed. "stop" ends
+ * an app this launcher started whose window is gone but whose process is
+ * not: SIGTERM to its process group, SIGKILL two seconds later if it is
+ * still there. starboard asks for it; only it knows about windows.
  *
- * "starry-launchd --ask app|exec DISPLAY ARGUMENT" sends one request, for testing.
+ * "starry-launchd --ask app|exec|stop DISPLAY ARGUMENT" sends one request, for testing.
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -28,6 +32,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 #include "constellation.h"
 
@@ -36,6 +41,7 @@
 #define DATA_DIR "/data/cosmic/data/"
 #define FIRST_APP_UID 10000
 #define MAX_REQUEST 4096
+#define KILL_AFTER_MSEC 2000
 
 struct app {
 	char program[PATH_MAX], home[PATH_MAX];
@@ -156,6 +162,72 @@ static pid_t launch_command(const char *display, const char *command) {
 	_exit(127);
 }
 
+/* From /proc/PID/stat: the parent and the start time, which tells this
+ * process from a later one that reuses its pid. False if it is gone. */
+static bool process_info(pid_t pid, pid_t *parent, unsigned long long *start) {
+	char path[64], line[1024];
+	snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
+	FILE *file = fopen(path, "r");
+	if (!file) {
+		return false;
+	}
+	bool ok = fgets(line, sizeof(line), file) != NULL;
+	fclose(file);
+	char *fields = ok ? strrchr(line, ')') : NULL; /* the name may hold anything */
+	char state;
+	int ppid;
+	/* After the name: state, ppid, then 17 fields, then starttime (field 22). */
+	if (!fields || sscanf(fields + 1, " %c %d %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s "
+			"%*s %*s %*s %*s %*s %*s %llu", &state, &ppid, start) != 3 || state == 'Z') {
+		return false;
+	}
+	*parent = ppid;
+	return true;
+}
+
+static bool same_process(pid_t pid, unsigned long long start) {
+	pid_t parent;
+	unsigned long long now;
+	return process_info(pid, &parent, &now) && now == start;
+}
+
+/* Apps run in sessions of their own: signal the whole group. */
+static void signal_app(pid_t pid, int signal) {
+	kill(getpgid(pid) == pid ? -pid : pid, signal);
+}
+
+/* Only our own children, and only by a helper, so the loop never waits. */
+static const char *stop_app(const char *argument, pid_t *stopped) {
+	char *end;
+	long pid = strtol(argument, &end, 10);
+	pid_t parent;
+	unsigned long long start;
+	if (*end || pid <= 1 || pid > INT_MAX) {
+		return "pid";
+	}
+	if (!process_info(pid, &parent, &start) || parent != getpid()) {
+		return "not ours";
+	}
+	pid_t helper = fork();
+	if (helper < 0) {
+		return strerror(errno);
+	}
+	if (helper == 0) {
+		signal_app(pid, SIGTERM);
+		for (int waited = 0; waited < KILL_AFTER_MSEC; waited += 100) {
+			nanosleep(&(struct timespec){ .tv_nsec = 100 * 1000000 }, NULL);
+			if (!same_process(pid, start)) {
+				_exit(0);
+			}
+		}
+		say("SIGKILL to an app that ignored SIGTERM", argument);
+		signal_app(pid, SIGKILL);
+		_exit(0);
+	}
+	*stopped = pid;
+	return NULL;
+}
+
 static void serve(int client, uid_t starry) {
 	struct ucred peer;
 	socklen_t size = sizeof(peer);
@@ -186,6 +258,8 @@ static void serve(int client, uid_t starry) {
 			pid = problem ? -1 : launch_app(display, &app);
 		} else if (strcmp(verb, "exec") == 0) {
 			pid = launch_command(display, argument);
+		} else if (strcmp(verb, "stop") == 0) {
+			problem = stop_app(argument, &pid);
 		} else {
 			problem = "invalid";
 		}
@@ -197,7 +271,7 @@ static void serve(int client, uid_t starry) {
 			say(argument, problem);
 		} else {
 			fprintf(stderr, "starry-launchd: %d: %s %s%s\n", (int)pid, verb, argument,
-				strcmp(verb, "app") == 0 ? "" : " (as root)");
+				strcmp(verb, "exec") == 0 ? " (as root)" : "");
 			snprintf(reply, sizeof(reply), "pid %d\n", (int)pid);
 		}
 	}
