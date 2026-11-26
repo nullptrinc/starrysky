@@ -40,6 +40,11 @@ uint8_t *icon_load(const char *path, int *width, int *height) {
 
 void icon_draw(struct canvas *canvas, const uint8_t *rgba, int width, int height, int size,
 		bool tint, uint32_t accent) {
+	icon_draw_at(canvas, 0, 0, rgba, width, height, size, tint, accent);
+}
+
+void icon_draw_at(struct canvas *canvas, int x, int y, const uint8_t *rgba, int width,
+		int height, int size, bool tint, uint32_t accent) {
 	uint8_t *out = calloc((size_t)size * size, 4);
 	if (!out) {
 		return;
@@ -110,6 +115,6 @@ void icon_draw(struct canvas *canvas, const uint8_t *rgba, int width, int height
 			q[3] = (uint8_t)lround(alpha);
 		}
 	}
-	canvas_blit_rgba(canvas, 0, 0, out, size, size, false, size);
+	canvas_blit_rgba(canvas, x, y, out, size, size, false, size);
 	free(out);
 }

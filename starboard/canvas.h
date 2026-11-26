@@ -29,6 +29,8 @@ void canvas_round_rect(struct canvas *canvas, double x, double y,
 double canvas_text_width(bool bold, double size, const char *text);
 void canvas_text(struct canvas *canvas, bool bold, double size,
 	double x, double baseline, uint32_t argb, const char *text);
+/* Blends one pixel of argb (straight alpha) at the given coverage, 0..1. */
+void canvas_blend(struct canvas *canvas, int x, int y, uint32_t argb, double coverage);
 /* Blends straight-alpha RGBA pixels with their top-left at (x, y). invert
  * swaps black and white (and every colour for its complement) keeping alpha;
  * only the first clip_width columns are drawn. */

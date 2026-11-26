@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <linux/input-event-codes.h>
 #include <math.h>
 #include <stdint.h>
 #include <execinfo.h>
@@ -17,6 +18,7 @@
 #include <unistd.h>
 #include "canvas.h"
 #include "starry-system-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 #include "starboard.h"
 
 static void crash_handler(int signal) {
@@ -39,7 +41,7 @@ void sb_timer_arm(struct sb_timer *timer, uint32_t delay_msec) {
 
 struct wl_surface *sb_surface_create(struct starboard *sb, bool input) {
 	struct wl_surface *surface = wl_compositor_create_surface(sb->compositor);
-	wl_surface_set_buffer_scale(surface, SB_SCALE);
+	wl_surface_set_buffer_scale(surface, sb->tv ? 1 : SB_SCALE);
 	if (!input) {
 		struct wl_region *none = wl_compositor_create_region(sb->compositor);
 		wl_surface_set_input_region(surface, none);
@@ -83,6 +85,16 @@ void sb_sprite_destroy(struct sb_sprite *sprite) {
 }
 
 /* ---- scenes: application windows reported by the compositor ---- */
+
+struct sb_scene *sb_scene_for_app(struct starboard *sb, const struct sb_app *app) {
+	struct sb_scene *scene;
+	wl_list_for_each(scene, &sb->scenes, link) {
+		if (app->pid && scene->pid == app->pid) {
+			return scene;
+		}
+	}
+	return NULL;
+}
 
 struct sb_scene *sb_foreground_scene(struct starboard *sb) {
 	struct sb_scene *scene;
@@ -168,6 +180,9 @@ static void scene_state(void *data, struct starry_scene_v1 *object, uint32_t sta
 		switcher_hide(scene->sb);
 	}
 	status_update(scene->sb);
+	if (scene->sb->tv) {
+		tv_scenes_changed(scene->sb);
+	}
 }
 
 static void scene_closed(void *data, struct starry_scene_v1 *object) {
@@ -178,6 +193,9 @@ static void scene_closed(void *data, struct starry_scene_v1 *object) {
 	starry_scene_v1_destroy(object);
 	free(scene);
 	status_update(sb);
+	if (sb->tv) {
+		tv_scenes_changed(sb);
+	}
 }
 
 static const struct starry_scene_v1_listener scene_listener = {
@@ -207,10 +225,25 @@ static void system_switcher(void *data, struct starry_system_v1 *system, int32_t
 	switcher_show(data, y);
 }
 
+/* Home: back to the home screen from an app; on it, back to the start. */
+static void system_key(void *data, struct starry_system_v1 *system, uint32_t key,
+		uint32_t state) {
+	struct starboard *sb = data;
+	if (key != KEY_HOMEPAGE || state != WL_KEYBOARD_KEY_STATE_PRESSED) {
+		return;
+	}
+	if (sb->tv) {
+		tv_home_key(sb);
+	} else if (sb_foreground_scene(sb)) {
+		starry_system_v1_go_home(sb->system);
+	}
+}
+
 static const struct starry_system_v1_listener system_listener = {
 	.output = system_output,
 	.scene = system_scene,
 	.switcher = system_switcher,
+	.key = system_key,
 };
 
 /* ---- launching (the FrontBoard part): reuse a live scene, else start the app ---- */
@@ -257,12 +290,10 @@ static pid_t launch_through_daemon(const char *verb, const char *argument) {
 
 void sb_launch(struct starboard *sb, int index) {
 	struct sb_app *app = &sb->apps[index];
-	struct sb_scene *scene;
-	wl_list_for_each(scene, &sb->scenes, link) {
-		if (app->pid && scene->pid == app->pid) {
-			starry_scene_v1_activate(scene->scene, STARRY_SCENE_V1_ANIMATION_SLIDE);
-			return;
-		}
+	struct sb_scene *scene = sb_scene_for_app(sb, app);
+	if (scene) {
+		starry_scene_v1_activate(scene->scene, STARRY_SCENE_V1_ANIMATION_SLIDE);
+		return;
 	}
 	/* An adopted app's process is not our child, so no SIGCHLD tells us it
 	 * died; check before waiting for a window that will never come. */
@@ -397,11 +428,57 @@ static const struct wl_touch_listener touch_listener = {
 	.cancel = touch_cancel,
 };
 
+/* ---- keys: the TV home screen follows the remote ---- */
+
+static void keyboard_keymap(void *data, struct wl_keyboard *keyboard, uint32_t format,
+		int32_t fd, uint32_t size) {
+	close(fd); /* evdev codes are all the home screen needs */
+}
+
+static void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t serial,
+		struct wl_surface *surface, struct wl_array *keys) {
+}
+
+static void keyboard_leave(void *data, struct wl_keyboard *keyboard, uint32_t serial,
+		struct wl_surface *surface) {
+	tv_keyboard_left(data);
+}
+
+static void keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t serial,
+		uint32_t time, uint32_t key, uint32_t state) {
+	tv_key(data, key, state == WL_KEYBOARD_KEY_STATE_PRESSED);
+}
+
+static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard, uint32_t serial,
+		uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group) {
+}
+
+static void keyboard_repeat_info(void *data, struct wl_keyboard *keyboard, int32_t rate,
+		int32_t delay) {
+	struct starboard *sb = data;
+	sb->tv_repeat_rate = rate;
+	sb->tv_repeat_delay = delay;
+}
+
+static const struct wl_keyboard_listener keyboard_listener = {
+	.keymap = keyboard_keymap,
+	.enter = keyboard_enter,
+	.leave = keyboard_leave,
+	.key = keyboard_key,
+	.modifiers = keyboard_modifiers,
+	.repeat_info = keyboard_repeat_info,
+};
+
 static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t capabilities) {
 	struct starboard *sb = data;
-	if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) && !sb->touch) {
+	/* The TV home screen is for the remote; a trackpad will come separately. */
+	if (!sb->tv && (capabilities & WL_SEAT_CAPABILITY_TOUCH) && !sb->touch) {
 		sb->touch = wl_seat_get_touch(seat);
 		wl_touch_add_listener(sb->touch, &touch_listener, sb);
+	}
+	if (sb->tv && (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && !sb->keyboard) {
+		sb->keyboard = wl_seat_get_keyboard(seat);
+		wl_keyboard_add_listener(sb->keyboard, &keyboard_listener, sb);
 	}
 }
 
@@ -427,8 +504,11 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 	} else if (strcmp(interface, wl_seat_interface.name) == 0 && !sb->seat) {
 		sb->seat = wl_registry_bind(registry, name, &wl_seat_interface, version < 5 ? version : 5);
 		wl_seat_add_listener(sb->seat, &seat_listener, sb);
+	} else if (strcmp(interface, wp_viewporter_interface.name) == 0) {
+		sb->viewporter = wl_registry_bind(registry, name, &wp_viewporter_interface, 1);
 	} else if (strcmp(interface, starry_system_v1_interface.name) == 0) {
-		sb->system = wl_registry_bind(registry, name, &starry_system_v1_interface, 1);
+		sb->system = wl_registry_bind(registry, name, &starry_system_v1_interface,
+			version < 2 ? version : 2);
 		starry_system_v1_add_listener(sb->system, &system_listener, sb);
 	}
 }
@@ -447,7 +527,8 @@ static const char *env_or(const char *name, const char *fallback) {
 }
 
 static int next_timeout(struct starboard *sb) {
-	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick };
+	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
+		&sb->tv_shelf_timer };
 	uint32_t now = sb_now_msec();
 	int timeout = -1;
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
@@ -461,7 +542,8 @@ static int next_timeout(struct starboard *sb) {
 }
 
 static void run_timers(struct starboard *sb) {
-	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick };
+	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
+		&sb->tv_shelf_timer };
 	uint32_t now = sb_now_msec();
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
 		if (timers[i]->deadline && (int32_t)(timers[i]->deadline - now) <= 0) {
@@ -475,7 +557,9 @@ int main(void) {
 	signal(SIGSEGV, crash_handler);
 	signal(SIGABRT, crash_handler);
 	signal(SIGBUS, crash_handler);
-	struct starboard sb = { .running = true, .accent = SB_DEFAULT_ACCENT };
+	struct starboard sb = { .running = true, .accent = SB_DEFAULT_ACCENT, .tv_focus = -1 };
+	const char *mode = getenv("STARRY_MODE");
+	sb.tv = mode && strcmp(mode, "tv") == 0;
 	wl_list_init(&sb.scenes);
 
 	sb.display = wl_display_connect(NULL);
@@ -490,6 +574,10 @@ int main(void) {
 	wl_display_roundtrip(sb.display);
 	if (!sb.compositor || !sb.subcompositor || !sb.shm || !sb.system || !sb.width) {
 		sb_log("Missing globals; was starboard started by starry-compositor?");
+		return 1;
+	}
+	if (sb.tv && !sb.viewporter) {
+		sb_log("The TV home screen needs wp_viewporter");
 		return 1;
 	}
 	if (!canvas_font_init("/usr/share/fonts/ttf/LiberationSans-Regular.ttf",
@@ -513,8 +601,8 @@ int main(void) {
 	status_load_plugins(&sb, env_or("STARRY_PLUGIN_DIR", STARRY_PLUGIN_DIR));
 	status_create(&sb);
 	switcher_create(&sb);
-	sb_log("Ready: %dx%d, %d apps, %d status items", sb.width, sb.height,
-		sb.app_count, sb.status_item_count);
+	sb_log("Ready: %dx%d%s, %d apps, %d status items", sb.width, sb.height,
+		sb.tv ? " (TV)" : "", sb.app_count, sb.status_item_count);
 
 	while (sb.running) {
 		while (wl_display_prepare_read(sb.display) != 0) {

@@ -20,6 +20,8 @@
 struct canvas;
 struct cn_client;
 struct cn_object;
+struct wp_viewporter;
+struct wp_viewport;
 
 struct sb_battery_state {
 	bool present;
@@ -54,6 +56,9 @@ struct sb_app {
 	struct sb_sprite icon, label;
 	struct canvas *icon_canvas, *lifted_canvas, *label_canvas;
 	double x, y; /* current position; eases towards the slot */
+	/* TV: the card is drawn lifted and scaled down by the compositor. */
+	struct wp_viewport *viewport;
+	double focus, focus_velocity; /* 0..1 on a spring */
 };
 
 struct sb_scene {
@@ -164,6 +169,24 @@ struct starboard {
 	uint32_t switcher_frame_msec;
 
 	struct wl_list scenes;
+
+	/* tv.c: STARRY_MODE=tv, a remote instead of a finger */
+	bool tv;
+	struct wp_viewporter *viewporter;
+	struct wl_keyboard *keyboard;
+	struct wp_viewport *backdrop_viewport;
+	struct canvas *tv_backdrop, *tv_shadow_canvas, *tv_sheen_canvas, *tv_caption_canvas;
+	struct canvas *tv_shelf_canvas;
+	struct sb_sprite tv_shadow, tv_sheen, tv_caption, tv_shelf;
+	struct wp_viewport *tv_shadow_viewport, *tv_sheen_viewport;
+	int tv_focus; /* app index, -1 for none */
+	double tv_scroll[2], tv_scroll_velocity[2], tv_scroll_target[2]; /* per row */
+	double tv_lean_x, tv_lean_y, tv_lean_vx, tv_lean_vy; /* -1..1, springs to 0 */
+	struct wl_callback *tv_frame;
+	uint32_t tv_frame_msec;
+	struct sb_timer tv_repeat, tv_shelf_timer;
+	uint32_t tv_repeat_key;
+	int tv_repeat_rate, tv_repeat_delay;
 };
 
 /* main.c */
@@ -178,6 +201,7 @@ void sb_sprite_move(struct sb_sprite *sprite, double x, double y);
 void sb_sprite_destroy(struct sb_sprite *sprite);
 const char *sb_app_name_for_pid(struct starboard *sb, pid_t pid);
 void sb_launch(struct starboard *sb, int index);
+struct sb_scene *sb_scene_for_app(struct starboard *sb, const struct sb_app *app);
 
 /* home.c */
 void home_load_apps(struct starboard *sb, const char *catalog, const char *layout);
@@ -186,12 +210,17 @@ void home_create(struct starboard *sb);
 void home_app_changed(struct starboard *sb, const struct cn_object *object, bool exists);
 /* The system appearance changed: icon style or accent. */
 void home_appearance_changed(struct starboard *sb, const struct cn_object *object, bool exists);
+/* The package icon for the current appearance, or NULL for a catalogue app. */
+const uint8_t *home_package_icon(struct starboard *sb, struct sb_app *app);
 
 /* icons.c */
 uint8_t *icon_load(const char *path, int *width, int *height);
 /* Scales the icon into the canvas's top-left size×size square. */
 void icon_draw(struct canvas *canvas, const uint8_t *rgba, int width, int height, int size,
 	bool tint, uint32_t accent);
+/* The same with the square's top-left corner at (x, y). */
+void icon_draw_at(struct canvas *canvas, int x, int y, const uint8_t *rgba, int width,
+	int height, int size, bool tint, uint32_t accent);
 void home_touch_down(struct starboard *sb, struct sb_touch *point);
 void home_touch_motion(struct starboard *sb, struct sb_touch *point);
 void home_touch_up(struct starboard *sb, struct sb_touch *point);
@@ -204,6 +233,18 @@ void switcher_scene_closed(struct starboard *sb, struct sb_scene *scene);
 void switcher_touch_down(struct starboard *sb, struct sb_touch *point);
 void switcher_touch_motion(struct starboard *sb, struct sb_touch *point, uint32_t time);
 void switcher_touch_up(struct starboard *sb, struct sb_touch *point, uint32_t time);
+
+/* tv.c */
+void tv_create(struct starboard *sb);
+void tv_app_added(struct starboard *sb, int index);
+void tv_app_changed(struct starboard *sb, int index);
+void tv_app_removing(struct starboard *sb, int index); /* before it leaves sb->apps */
+void tv_app_removed(struct starboard *sb, int index);  /* after */
+void tv_redraw_cards(struct starboard *sb);
+void tv_key(struct starboard *sb, uint32_t key, bool pressed);
+void tv_home_key(struct starboard *sb);
+void tv_scenes_changed(struct starboard *sb);
+void tv_keyboard_left(struct starboard *sb);
 
 /* battery.c */
 bool battery_load(const char *svg_path, const char *map_path);

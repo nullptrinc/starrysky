@@ -179,7 +179,7 @@ static bool in_done_button(struct starboard *sb, double x, double y) {
 
 /* The package icon for the current appearance, decoded once per file.
  * Missing appearances fall back to the default one. */
-static const uint8_t *package_icon(struct starboard *sb, struct sb_app *app) {
+const uint8_t *home_package_icon(struct starboard *sb, struct sb_app *app) {
 	const char *path = app->icons[sb->icon_style][0] ? app->icons[sb->icon_style] : app->icons[0];
 	if (!path[0]) {
 		return NULL;
@@ -194,7 +194,7 @@ static const uint8_t *package_icon(struct starboard *sb, struct sb_app *app) {
 
 static void draw_app(struct starboard *sb, struct sb_app *app) {
 	const double s = SB_SCALE;
-	const uint8_t *image = package_icon(sb, app);
+	const uint8_t *image = home_package_icon(sb, app);
 	for (int lifted = 0; lifted < 2; lifted++) {
 		double size = (ICON + (lifted ? 2 * LIFT : 0)) * s;
 		struct canvas *icon = canvas_create(sb->shm, size, size);
@@ -246,6 +246,10 @@ static void set_lifted(struct starboard *sb, struct sb_app *app, bool lifted) {
 static void long_press(struct starboard *sb);
 
 void home_create(struct starboard *sb) {
+	if (sb->tv) {
+		tv_create(sb);
+		return;
+	}
 	const int s = SB_SCALE, w = sb->width, h = sb->height;
 	sb->long_press.callback = long_press;
 	sb->home = sb_surface_create(sb, true);
@@ -320,6 +324,9 @@ static void remove_app(struct starboard *sb, int index) {
 	if (sb->dragging >= 0) {
 		sb->dragging = -1; /* the order is about to change under the finger */
 	}
+	if (sb->tv) {
+		tv_app_removing(sb, index);
+	}
 	sb_sprite_destroy(&app->icon);
 	sb_sprite_destroy(&app->label);
 	release_art(app);
@@ -327,6 +334,10 @@ static void remove_app(struct starboard *sb, int index) {
 	memmove(&sb->apps[index], &sb->apps[index + 1],
 		(size_t)(sb->app_count - index - 1) * sizeof(*app));
 	sb->app_count--;
+	if (sb->tv) {
+		tv_app_removed(sb, index);
+		return;
+	}
 	home_schedule(sb); /* the others ease into the gap */
 }
 
@@ -364,6 +375,10 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 		app->color = 0xff000000 | color;
 		memcpy(app->icons, icons, sizeof(icons));
 		release_art(app);
+		if (sb->tv) {
+			tv_app_changed(sb, index);
+			return;
+		}
 		draw_app(sb, app);
 		set_lifted(sb, app, false);
 		wl_surface_commit(sb->home); /* icons are synced subsurfaces of home */
@@ -385,6 +400,11 @@ void home_app_changed(struct starboard *sb, const struct cn_object *object, bool
 		}
 	}
 	int index_new = sb->app_count++;
+	if (sb->tv) {
+		tv_app_added(sb, index_new);
+		sb_log("Added %s (%s)", app->name, id);
+		return;
+	}
 	draw_app(sb, app);
 	sb_sprite_init(sb, sb->home, &app->icon, app->icon_canvas);
 	sb_sprite_init(sb, sb->home, &app->label, app->dock ? NULL : app->label_canvas);
@@ -416,6 +436,11 @@ void home_appearance_changed(struct starboard *sb, const struct cn_object *objec
 	sb->icon_style = icon_style;
 	sb->accent = accent;
 	if (!sb->home) {
+		return;
+	}
+	if (sb->tv) {
+		tv_redraw_cards(sb);
+		sb_log("Icons: %s", styles[icon_style]);
 		return;
 	}
 	/* Redraw the packages' icons; tiles of catalogue apps do not change. */

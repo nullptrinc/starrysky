@@ -175,6 +175,9 @@ static void schedule(struct starboard *sb) {
 /* ---- showing and hiding ---- */
 
 void switcher_create(struct starboard *sb) {
+	if (sb->tv) {
+		return; /* no swipe to open it, and a full-screen backdrop costs 8 MB */
+	}
 	sb->switcher = sb_surface_create(sb, true);
 	sb->switcher_layer = starry_system_v1_get_layer_surface(sb->system, sb->switcher,
 		STARRY_SYSTEM_V1_LAYER_SWITCHER);
@@ -191,7 +194,7 @@ static int by_recency(const void *a, const void *b) {
 }
 
 void switcher_show(struct starboard *sb, int from_y) {
-	if (sb->switcher_shown) {
+	if (sb->switcher_shown || !sb->switcher) {
 		return;
 	}
 	struct sb_scene *scenes[SB_MAX_CARDS];

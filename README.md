@@ -58,8 +58,8 @@ from the icon when opening an app.
 ## Building
 
 Dependencies: wlroots 0.20 (DRM, libinput, GLES2, GBM, session), wayland,
-xkbcommon, freetype2, the Constellation client library, meson, ninja,
-wayland-scanner.
+wayland-protocols, xkbcommon, freetype2, libpng, the Constellation client
+library, meson, ninja, wayland-scanner.
 
 ```sh
 meson setup build --prefix=/opt/starry --libdir=lib
@@ -105,7 +105,31 @@ The app catalogue lives in `<prefix>/etc/starry/apps`, one app per line
 (`Name|#RRGGBB|dock(0/1)|shell command`), for development; installed packages come from cosmic.
 
 Environment overrides: `STARRY_STARBOARD` (starboard binary), `STARRY_APPS`,
-`STARRY_PLUGIN_DIR`, `STARRY_DEBUG` (verbose wlroots log).
+`STARRY_PLUGIN_DIR`, `STARRY_DEBUG` (verbose wlroots log), `STARRY_MODE`.
+
+## TV mode
+
+`STARRY_MODE=tv` turns Starry into a TV shell for a remote control. Put it in
+`/etc/default/starry`, which the service and `starry-run` read:
+
+```sh
+echo STARRY_MODE=tv > /etc/default/starry
+```
+
+- The compositor drives the TV at 1920x1080 (up to 60 Hz, even when the set
+  prefers 4K) at scale 1; apps get the whole screen, with no status bar.
+- starboard shows a home screen of app cards from the same catalogue and
+  app registry: favourites (the dock apps) in the top row, the rest below,
+  a top shelf with the focused app, and the clock in the corner. The arrow
+  keys move the focus (held, they repeat), OK opens the app, Back returns
+  to the first card.
+- Keys go to the foreground app, or to starboard while the home screen is
+  shown. Home (`KEY_HOMEPAGE`) always goes to starboard (through
+  `starry_system_v1.key`) and brings the home screen back with that app in
+  focus.
+- `starry-launchd` passes `STARRY_MODE` to apps, so Stardust apps pick the
+  TV variant of `Theme`.
+- There is no app switcher and no touch input in TV mode yet.
 
 ## Writing a plugin
 

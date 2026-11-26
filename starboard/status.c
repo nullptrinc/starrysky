@@ -20,6 +20,14 @@
 #define EDGE 22
 #define GAP 10
 #define BATTERY_HEIGHT 12
+/* TV: the clock alone in the top right corner of the home screen, inside
+ * the overscan-safe area; nothing over apps. */
+#define TV_WIDTH 520
+#define TV_HEIGHT 60
+#define TV_MARGIN_X 96
+#define TV_MARGIN_Y 44
+#define TV_CLOCK_SIZE 40
+#define TV_TEXT_SIZE 26
 
 /* ---- plugin host ---- */
 
@@ -141,9 +149,18 @@ static void status_tick(struct starboard *sb) {
 }
 
 void status_create(struct starboard *sb) {
-	sb->status = sb_surface_create(sb, true);
+	sb->status = sb_surface_create(sb, !sb->tv);
 	sb->status_layer = starry_system_v1_get_layer_surface(sb->system, sb->status,
 		STARRY_SYSTEM_V1_LAYER_OVERLAY);
+	sb->status_tick.callback = status_tick;
+	if (sb->tv) {
+		starry_layer_surface_v1_set_position(sb->status_layer,
+			sb->width - TV_MARGIN_X - TV_WIDTH, TV_MARGIN_Y);
+		blinks_connect(sb);
+		status_update(sb);
+		sb_timer_arm(&sb->status_tick, 1000);
+		return;
+	}
 
 	const int s = SB_SCALE;
 	sb->indicator = sb_surface_create(sb, false);
@@ -164,7 +181,7 @@ void status_create(struct starboard *sb) {
 }
 
 static void show_indicator(struct starboard *sb, bool shown) {
-	if (sb->indicator_shown == shown) {
+	if (!sb->indicator || sb->indicator_shown == shown) {
 		return;
 	}
 	sb->indicator_shown = shown;
@@ -210,6 +227,34 @@ void status_update(struct starboard *sb) {
 		return;
 	}
 	snprintf(sb->status_key, sizeof(sb->status_key), "%s", key);
+
+	if (sb->tv) {
+		/* Clock and plugin texts, right-aligned; hidden while an app is shown. */
+		struct canvas *canvas = NULL;
+		if (!foreground) {
+			canvas = canvas_create(sb->shm, TV_WIDTH, TV_HEIGHT);
+			double right = TV_WIDTH - canvas_text_width(true, TV_CLOCK_SIZE, clock);
+			canvas_text(canvas, true, TV_CLOCK_SIZE, right, 46, 0xfff2f4f8, clock);
+			for (int i = sb->status_item_count - 1; i >= 0; i--) {
+				const char *text = sb->status_items[i].text;
+				double width = canvas_text_width(false, TV_TEXT_SIZE, text);
+				if (!text[0] || right - width - 24 < 0) {
+					continue;
+				}
+				right -= width + 24;
+				canvas_text(canvas, false, TV_TEXT_SIZE, right, 44, 0xff9aa3b2, text);
+			}
+			canvas->busy = true;
+		}
+		wl_surface_attach(sb->status, canvas ? canvas->buffer : NULL, 0, 0);
+		wl_surface_damage_buffer(sb->status, 0, 0, INT32_MAX, INT32_MAX);
+		wl_surface_commit(sb->status);
+		if (sb->status_canvas) {
+			canvas_release(sb->status_canvas);
+		}
+		sb->status_canvas = canvas;
+		return;
+	}
 
 	const int s = SB_SCALE, w = sb->width;
 	struct canvas *canvas = canvas_create(sb->shm, w * s, SB_STATUS_HEIGHT * s);

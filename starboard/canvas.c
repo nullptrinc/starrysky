@@ -83,6 +83,12 @@ static void blend(uint32_t *dst, uint32_t src) {
 	*dst = out;
 }
 
+void canvas_blend(struct canvas *canvas, int x, int y, uint32_t argb, double coverage) {
+	if (x >= 0 && y >= 0 && x < canvas->width && y < canvas->height && coverage > 0) {
+		blend(&canvas->pixels[y * canvas->width + x], premultiply(argb, fmin(1, coverage)));
+	}
+}
+
 void canvas_vertical_gradient(struct canvas *canvas, uint32_t top, uint32_t bottom) {
 	for (int y = 0; y < canvas->height; y++) {
 		double t = (double)y / (canvas->height - 1);

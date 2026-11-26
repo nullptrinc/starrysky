@@ -33,6 +33,16 @@ protocol_client = custom_target('starry-system-v1-client-protocol.h',
   input: protocol_xml, output: '@BASENAME@-client-protocol.h',
   command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
 
+# wp_viewporter: the TV home screen scales its cards in the compositor.
+wayland_protocols = dependency('wayland-protocols')
+viewporter_xml = wayland_protocols.get_variable('pkgdatadir') / 'stable/viewporter/viewporter.xml'
+viewporter_code = custom_target('viewporter-protocol.c',
+  input: viewporter_xml, output: 'viewporter-protocol.c',
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+viewporter_client = custom_target('viewporter-client-protocol.h',
+  input: viewporter_xml, output: 'viewporter-client-protocol.h',
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
 screencopy_xml = files('protocol/wlr-screencopy-unstable-v1.xml')
 screencopy_code = custom_target('wlr-screencopy-protocol.c',
   input: screencopy_xml, output: '@BASENAME@-protocol.c',
@@ -64,7 +74,8 @@ nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
 
 executable('starboard',
   'starboard/main.c', 'starboard/home.c', 'starboard/status.c', 'starboard/switcher.c',
-  'starboard/canvas.c', 'starboard/battery.c', 'starboard/icons.c', protocol_code, protocol_client,
+  'starboard/canvas.c', 'starboard/battery.c', 'starboard/icons.c', 'starboard/tv.c',
+  protocol_code, protocol_client, viewporter_code, viewporter_client,
   link_with: nanosvg,
   include_directories: plugin_include,
   dependencies: [
