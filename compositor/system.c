@@ -30,7 +30,7 @@ struct starry_layer {
 	struct wlr_surface *surface;
 	struct wlr_scene_tree *tree;
 	enum starry_system_v1_layer layer;
-	struct wl_listener surface_destroy;
+	struct wl_listener surface_destroy, surface_map;
 };
 
 /* ---- layer surfaces ---- */
@@ -51,6 +51,7 @@ static const struct wlr_surface_role layer_role = {
 static void layer_detach(struct starry_layer *layer) {
 	if (layer->surface) {
 		wl_list_remove(&layer->surface_destroy.link);
+		wl_list_remove(&layer->surface_map.link);
 		wlr_surface_unmap(layer->surface);
 		layer->surface = NULL;
 	}
@@ -63,8 +64,17 @@ static void layer_detach(struct starry_layer *layer) {
 static void layer_surface_destroyed(struct wl_listener *listener, void *data) {
 	struct starry_layer *layer = wl_container_of(listener, layer, surface_destroy);
 	wl_list_remove(&layer->surface_destroy.link);
+	wl_list_remove(&layer->surface_map.link);
 	layer->surface = NULL;
 	layer->tree = NULL; /* the subsurface tree destroys itself with the surface */
+}
+
+/* A (re)started shell's home screen takes the keys while no app is shown. */
+static void layer_surface_mapped(struct wl_listener *listener, void *data) {
+	struct starry_layer *layer = wl_container_of(listener, layer, surface_map);
+	if (layer->layer == STARRY_SYSTEM_V1_LAYER_HOME || layer->layer == STARRY_SYSTEM_V1_LAYER_LOCK) {
+		starry_refocus(layer->server);
+	}
 }
 
 static void layer_resource_destroy(struct wl_resource *resource) {
@@ -116,6 +126,22 @@ bool system_lock_mapped(struct starry_server *server) {
 	return false;
 }
 
+struct wlr_surface *system_shell_surface(struct starry_server *server) {
+	struct starry_layer *layer, *home = NULL;
+	wl_list_for_each(layer, &server->layers, link) {
+		if (!layer->surface || !layer->surface->mapped) {
+			continue;
+		}
+		if (layer->layer == STARRY_SYSTEM_V1_LAYER_LOCK) {
+			return layer->surface;
+		}
+		if (layer->layer == STARRY_SYSTEM_V1_LAYER_HOME) {
+			home = layer;
+		}
+	}
+	return home ? home->surface : NULL;
+}
+
 /* ---- starry_system_v1 ---- */
 
 static void system_handle_destroy(struct wl_client *client, struct wl_resource *resource) {
@@ -147,6 +173,8 @@ static void system_handle_get_layer_surface(struct wl_client *client,
 	layer->tree = wlr_scene_subsurface_tree_create(parent, surface);
 	layer->surface_destroy.notify = layer_surface_destroyed;
 	wl_signal_add(&surface->events.destroy, &layer->surface_destroy);
+	layer->surface_map.notify = layer_surface_mapped;
+	wl_signal_add(&surface->events.map, &layer->surface_map);
 	wl_list_insert(&server->layers, &layer->link);
 }
 
@@ -175,7 +203,16 @@ void system_switcher(struct starry_server *server, int y) {
 
 void system_output_changed(struct starry_server *server) {
 	if (server->system && server->output) {
-		starry_system_v1_send_output(server->system, server->width, server->height, STARRY_SCALE);
+		starry_system_v1_send_output(server->system, server->width, server->height, server->scale);
+	}
+}
+
+void system_key(struct starry_server *server, uint32_t key, uint32_t state) {
+	if (server->system &&
+			wl_resource_get_version(server->system) >= STARRY_SYSTEM_V1_KEY_SINCE_VERSION) {
+		starry_system_v1_send_key(server->system, key, state);
+	} else if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		starry_go_home(server, true); /* no shell to ask */
 	}
 }
 
@@ -257,9 +294,9 @@ static void snapshot_surface(struct wlr_surface *surface, int sx, int sy, void *
 /* Renders the window as it would appear full screen, at half the panel's density. */
 static struct wlr_buffer *snapshot_toplevel(struct starry_toplevel *toplevel) {
 	struct starry_server *server = toplevel->server;
-	const double scale = STARRY_SCALE / 2.0;
+	const double scale = server->scale / 2.0;
 	int width = lround(server->width * scale);
-	int height = lround((server->height - STARRY_STATUS_HEIGHT) * scale);
+	int height = lround((server->height - server->status_height) * scale);
 	uint64_t implicit = DRM_FORMAT_MOD_INVALID;
 	struct wlr_drm_format fallback = {
 		.format = DRM_FORMAT_XRGB8888, .len = 1, .capacity = 1, .modifiers = &implicit,
@@ -462,7 +499,7 @@ void system_init(struct starry_server *server) {
 	system_server = server;
 	wl_list_init(&server->layers);
 	server->system_global = wl_global_create(server->display, &starry_system_v1_interface,
-		1, server, system_bind);
+		2, server, system_bind);
 	wl_display_set_global_filter(server->display, global_filter, server);
 	server->respawn = wl_event_loop_add_timer(wl_display_get_event_loop(server->display),
 		respawn_starboard, server);

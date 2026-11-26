@@ -14,7 +14,7 @@
     compositor itself.
   </description>
 
-  <interface name="starry_system_v1" version="1">
+  <interface name="starry_system_v1" version="2">
     <enum name="layer">
       <entry name="home" value="0" summary="below applications: wallpaper and icons"/>
       <entry name="overlay" value="1" summary="above applications: status bar, indicators"/>
@@ -69,9 +69,24 @@
       </description>
       <arg name="y" type="int"/>
     </event>
+
+    <event name="key" since="2">
+      <description summary="a key reserved for the shell">
+        Keys the system reserves, today Home (Linux KEY_HOMEPAGE), never
+        reach applications or the shell's wl_keyboard; the shell gets them
+        here, whatever has the keyboard focus. Without a bound shell the
+        compositor goes home by itself.
+
+        All other keys follow the keyboard focus: the foreground
+        application, or the shell's home layer surface (the lock layer while
+        it is mapped) when no application is in the foreground.
+      </description>
+      <arg name="key" type="uint" summary="Linux evdev key code"/>
+      <arg name="state" type="uint" summary="as wl_keyboard.key_state: 1 pressed, 0 released"/>
+    </event>
   </interface>
 
-  <interface name="starry_layer_surface_v1" version="1">
+  <interface name="starry_layer_surface_v1" version="2">
     <request name="destroy" type="destructor"/>
 
     <request name="set_position">
@@ -80,7 +95,7 @@
     </request>
   </interface>
 
-  <interface name="starry_scene_v1" version="1">
+  <interface name="starry_scene_v1" version="2">
     <enum name="state">
       <entry name="background" value="0"/>
       <entry name="foreground" value="1"/>
@@ -126,7 +141,7 @@
     </event>
   </interface>
 
-  <interface name="starry_scene_view_v1" version="1">
+  <interface name="starry_scene_view_v1" version="2">
     <request name="destroy" type="destructor"/>
 
     <request name="set_geometry">

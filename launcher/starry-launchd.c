@@ -113,15 +113,19 @@ static pid_t launch_app(const char *display, const struct app *app) {
 		return pid;
 	}
 	start_child();
-	const char *lang = getenv("LANG");
-	char language[64];
+	const char *lang = getenv("LANG"), *mode = getenv("STARRY_MODE");
+	char language[64], form[16];
 	snprintf(language, sizeof(language), "%s", lang ? lang : "C.UTF-8");
+	snprintf(form, sizeof(form), "%s", mode ? mode : "");
 	/* A fresh environment: nothing of ours leaks into the app. */
 	clearenv();
 	setenv("PATH", "/usr/bin:/bin", 1);
 	setenv("HOME", app->home, 1);
 	setenv("TMPDIR", app->home, 1);
 	setenv("LANG", language, 1);
+	if (form[0]) {
+		setenv("STARRY_MODE", form, 1); /* Stardust's Theme picks the TV variant */
+	}
 	setenv("XDG_RUNTIME_DIR", RUNTIME_DIR, 1);
 	setenv("WAYLAND_DISPLAY", display, 1);
 	if (app->qml) {

@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -81,16 +82,28 @@ static void animation_step(struct starry_server *server) {
 
 /* ---- foreground application ---- */
 
+/* Keys go to the foreground app, or to the shell's home screen without one
+ * (remote controls navigate it); the Home key is the shell's alone. */
 static void set_keyboard_focus(struct starry_server *server, struct starry_toplevel *toplevel) {
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
-	if (!toplevel) {
-		wlr_seat_keyboard_notify_clear_focus(server->seat);
-		return;
+	struct wlr_surface *surface = toplevel ? toplevel->xdg_toplevel->base->surface :
+		system_shell_surface(server);
+	if (toplevel) {
+		wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
 	}
-	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
-	if (keyboard) {
-		wlr_seat_keyboard_notify_enter(server->seat, toplevel->xdg_toplevel->base->surface,
+	if (!surface) {
+		wlr_seat_keyboard_notify_clear_focus(server->seat);
+	} else if (keyboard) {
+		wlr_seat_keyboard_notify_enter(server->seat, surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+	} else {
+		wlr_seat_keyboard_notify_enter(server->seat, surface, NULL, 0, NULL);
+	}
+}
+
+void starry_refocus(struct starry_server *server) {
+	if (!server->active) {
+		set_keyboard_focus(server, NULL);
 	}
 }
 
@@ -114,10 +127,10 @@ void starry_show_app(struct starry_server *server, struct starry_toplevel *tople
 	system_scene_state(toplevel, true);
 	if (slide) {
 		wlr_scene_node_set_position(&toplevel->tree->node, 0, server->height);
-		animate(server, &toplevel->tree->node, STARRY_STATUS_HEIGHT, 260, home_hidden);
+		animate(server, &toplevel->tree->node, server->status_height, 260, home_hidden);
 	} else {
 		server->animation.active = false;
-		wlr_scene_node_set_position(&toplevel->tree->node, 0, STARRY_STATUS_HEIGHT);
+		wlr_scene_node_set_position(&toplevel->tree->node, 0, server->status_height);
 		home_hidden(server);
 	}
 }
@@ -142,7 +155,7 @@ static void enter_switcher(struct starry_server *server) {
 		y = toplevel->tree->node.y;
 		system_scene_state(toplevel, false);
 		app_hidden(server);
-		wlr_scene_node_set_position(&toplevel->tree->node, 0, STARRY_STATUS_HEIGHT);
+		wlr_scene_node_set_position(&toplevel->tree->node, 0, server->status_height);
 	}
 	system_switcher(server, y);
 }
@@ -206,7 +219,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data) {
 	if (toplevel->xdg_toplevel->base->initial_commit) {
 		struct starry_server *server = toplevel->server;
 		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
-			server->width, server->height - STARRY_STATUS_HEIGHT);
+			server->width, server->height - server->status_height);
 		wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, true);
 		wlr_xdg_toplevel_set_tiled(toplevel->xdg_toplevel,
 			WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
@@ -374,7 +387,7 @@ static void touch_motion(struct wl_listener *listener, void *data) {
 		double lift = fmin(0, point->y - point->start_y);
 		wlr_scene_node_set_enabled(&server->home_layer->node, true);
 		wlr_scene_node_set_position(&server->active->tree->node, 0,
-			lround(STARRY_STATUS_HEIGHT + lift));
+			lround(server->status_height + lift));
 	} else if (point->role == STARRY_TOUCH_CLIENT) {
 		/* Motion stays relative to the surface that received the down event. */
 		wlr_seat_touch_notify_motion(server->seat, event->time_msec, event->touch_id,
@@ -401,7 +414,7 @@ static void touch_up(struct wl_listener *listener, void *data) {
 		} else if (distance > 40) {
 			starry_go_home(server, true);
 		} else {
-			animate(server, &server->active->tree->node, STARRY_STATUS_HEIGHT, 180, home_hidden);
+			animate(server, &server->active->tree->node, server->status_height, 180, home_hidden);
 		}
 	} else if (point->role == STARRY_TOUCH_HOME_GESTURE) {
 		if (point->start_y - point->y > 60) {
@@ -429,7 +442,7 @@ static void touch_frame(struct wl_listener *listener, void *data) {
 	wlr_seat_touch_notify_frame(server->seat);
 }
 
-/* ---- keys: power toggles the panel, the rest goes to the focused app ---- */
+/* ---- keys: power toggles the panel, Home is the shell's, the rest goes to the focused app ---- */
 
 struct starry_keyboard {
 	struct starry_server *server;
@@ -458,6 +471,10 @@ static void keyboard_key(struct wl_listener *listener, void *data) {
 		if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 			set_screen(server, !server->screen_on);
 		}
+		return;
+	}
+	if (event->keycode == KEY_HOMEPAGE) {
+		system_key(server, event->keycode, event->state);
 		return;
 	}
 	wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
@@ -520,6 +537,20 @@ static void new_input(struct wl_listener *listener, void *data) {
 
 /* ---- output ---- */
 
+/* A TV may prefer 4K, more than a Mali-450 can fill: take 1920x1080 at up
+ * to 60 Hz when the set offers it. */
+static struct wlr_output_mode *tv_mode(struct wlr_output *output) {
+	struct wlr_output_mode *mode, *best = NULL;
+	wl_list_for_each(mode, &output->modes, link) {
+		if (mode->width == 1920 && mode->height == 1080 && mode->refresh <= 60500 &&
+				(!best || mode->refresh > best->refresh || (mode->preferred && !best->preferred &&
+				mode->refresh == best->refresh))) {
+			best = mode;
+		}
+	}
+	return best ? best : wlr_output_preferred_mode(output);
+}
+
 struct starry_output {
 	struct starry_server *server;
 	struct wl_listener frame, request_state, destroy;
@@ -560,11 +591,12 @@ static void new_output(struct wl_listener *listener, void *data) {
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
 	wlr_output_state_set_enabled(&state, true);
-	struct wlr_output_mode *mode = wlr_output_preferred_mode(wlr_output);
+	struct wlr_output_mode *mode = server->tv ? tv_mode(wlr_output) :
+		wlr_output_preferred_mode(wlr_output);
 	if (mode) {
 		wlr_output_state_set_mode(&state, mode);
 	}
-	wlr_output_state_set_scale(&state, STARRY_SCALE);
+	wlr_output_state_set_scale(&state, server->scale);
 	bool ok = wlr_output_commit_state(wlr_output, &state);
 	wlr_output_state_finish(&state);
 	if (!ok) {
@@ -600,6 +632,11 @@ int main(int argc, char *argv[]) {
 	prctl(PR_SET_CHILD_SUBREAPER, 1);
 
 	struct starry_server server = {0};
+	const char *mode = getenv("STARRY_MODE");
+	server.tv = mode && strcmp(mode, "tv") == 0;
+	server.scale = server.tv ? 1 : STARRY_SCALE;
+	server.status_height = server.tv ? 0 : STARRY_STATUS_HEIGHT;
+	wlr_log(WLR_INFO, "Starry in %s mode", server.tv ? "TV" : "phone");
 	wl_list_init(&server.toplevels);
 	server.display = wl_display_create();
 	struct wl_event_loop *loop = wl_display_get_event_loop(server.display);

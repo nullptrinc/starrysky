@@ -20,6 +20,9 @@ log=/run/starry.log
 export XDG_RUNTIME_DIR=/run/starry
 # App names on the home screen and in apps follow this.
 export LANG=${LANG:-ru_RU.UTF-8}
+# Per-device settings, e.g. STARRY_MODE=tv for a TV box with a remote.
+[ -r /etc/default/starry ] && . /etc/default/starry
+[ -n "$STARRY_MODE" ] && export STARRY_MODE
 
 running() {
 	[ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null

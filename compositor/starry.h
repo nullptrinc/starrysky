@@ -7,6 +7,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
 
+/* The phone; STARRY_MODE=tv drives a 1920x1080 TV at 1x with no status bar. */
 #define STARRY_SCALE 3
 #define STARRY_STATUS_HEIGHT 28
 #define STARRY_GESTURE_EDGE 28
@@ -51,6 +52,9 @@ struct starry_server {
 	struct wlr_scene_output *scene_output;
 	int width, height; /* logical */
 	bool screen_on;
+	bool tv;           /* STARRY_MODE=tv: remote control, 1080p at 1x */
+	int scale;         /* output scale */
+	int status_height; /* apps start below the status bar */
 
 	struct wlr_scene_tree *home_layer, *app_layer, *switcher_layer, *view_layer;
 	struct wlr_scene_tree *overlay_layer, *lock_layer;
@@ -91,6 +95,8 @@ struct starry_toplevel {
 uint32_t starry_now_msec(void);
 void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel, bool slide);
 void starry_go_home(struct starry_server *server, bool animated);
+/* Gives the keyboard to the shell when no app is in the foreground. */
+void starry_refocus(struct starry_server *server);
 
 /* system.c */
 void system_init(struct starry_server *server);
@@ -102,5 +108,9 @@ void system_scene_state(struct starry_toplevel *toplevel, bool foreground);
 void system_scene_removed(struct starry_toplevel *toplevel);
 bool system_lock_mapped(struct starry_server *server);
 void system_switcher(struct starry_server *server, int y);
+/* The shell surface that takes keys while no app is in the foreground. */
+struct wlr_surface *system_shell_surface(struct starry_server *server);
+/* A key reserved for the shell (Home). */
+void system_key(struct starry_server *server, uint32_t key, uint32_t state);
 
 #endif
