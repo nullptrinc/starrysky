@@ -107,6 +107,10 @@ static void blinks_changed(const struct cn_object *object, bool exists, void *da
 		home_app_changed(sb, object, exists);
 	} else if (strcmp(object->path, CN_NAMESPACE "system/appearance") == 0) {
 		home_appearance_changed(sb, object, exists);
+	} else if (strcmp(object->path, CN_NAMESPACE "settings/audio") == 0) {
+		if (sb->tv) {
+			tv_control_audio_changed(sb, object, exists);
+		}
 	} else {
 		battery_changed(&sb->battery, object, exists);
 	}
@@ -127,6 +131,10 @@ static void blinks_connect(struct starboard *sb) {
 			!cn_subscribe(sb->blinks, CN_NAMESPACE "system/appearance"))) {
 		cn_disconnect(sb->blinks);
 		sb->blinks = NULL;
+	}
+	/* The volume, for the TV control centre; it does without. */
+	if (sb->blinks && sb->tv && !cn_subscribe(sb->blinks, CN_NAMESPACE "settings/audio")) {
+		sb_log("No volume: cannot subscribe to settings/audio");
 	}
 }
 

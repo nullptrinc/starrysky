@@ -14,7 +14,7 @@
     compositor itself.
   </description>
 
-  <interface name="starry_system_v1" version="2">
+  <interface name="starry_system_v1" version="3">
     <enum name="layer">
       <entry name="home" value="0" summary="below applications: wallpaper and icons"/>
       <entry name="overlay" value="1" summary="above applications: status bar, indicators"/>
@@ -72,7 +72,9 @@
 
     <event name="key" since="2">
       <description summary="a key reserved for the shell">
-        Keys the system reserves, today Home (Linux KEY_HOMEPAGE), never
+        Keys the system reserves, today Home (Linux KEY_HOMEPAGE) and, in
+        TV mode with a shell of version 3, Power and Sleep (KEY_POWER,
+        KEY_SLEEP), never
         reach applications or the shell's wl_keyboard; the shell gets them
         here, whatever has the keyboard focus. Without a bound shell the
         compositor goes home by itself.
@@ -87,9 +89,26 @@
       <arg name="key" type="uint" summary="Linux evdev key code"/>
       <arg name="state" type="uint" summary="as wl_keyboard.key_state: 1 pressed, 0 released"/>
     </event>
+
+    <request name="set_screen" since="3">
+      <description summary="turn the panel off or on">
+        Turning it off is the shell's sleep. In TV mode the next key press
+        of any key turns it on again; that key, up to its release, reaches
+        no one.
+      </description>
+      <arg name="on" type="uint" summary="1 on, 0 off"/>
+    </request>
+
+    <event name="screen" since="3">
+      <description summary="the panel was turned off or on">
+        Sent whenever the panel goes off or on, whoever asked: the shell, a
+        key that woke it or the power key.
+      </description>
+      <arg name="on" type="uint" summary="1 on, 0 off"/>
+    </event>
   </interface>
 
-  <interface name="starry_layer_surface_v1" version="2">
+  <interface name="starry_layer_surface_v1" version="3">
     <request name="destroy" type="destructor"/>
 
     <request name="set_position">
@@ -98,7 +117,7 @@
     </request>
   </interface>
 
-  <interface name="starry_scene_v1" version="2">
+  <interface name="starry_scene_v1" version="3">
     <enum name="state">
       <entry name="background" value="0"/>
       <entry name="foreground" value="1"/>
@@ -144,7 +163,7 @@
     </event>
   </interface>
 
-  <interface name="starry_scene_view_v1" version="2">
+  <interface name="starry_scene_view_v1" version="3">
     <request name="destroy" type="destructor"/>
 
     <request name="set_geometry">

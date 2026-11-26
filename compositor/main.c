@@ -190,6 +190,12 @@ static int handle_switcher_signal(int signal, void *data) {
 	return 0;
 }
 
+/* SIGUSR2 turns the panel back on, for a TV put to sleep with no remote at hand. */
+static int handle_wake_signal(int signal, void *data) {
+	starry_set_screen(data, true);
+	return 0;
+}
+
 static int handle_terminate(int signal, void *data) {
 	wl_display_terminate(((struct starry_server *)data)->display);
 	return 0;
@@ -453,7 +459,7 @@ struct starry_keyboard {
 	struct wl_listener key, modifiers, destroy;
 };
 
-static void set_screen(struct starry_server *server, bool on) {
+void starry_set_screen(struct starry_server *server, bool on) {
 	if (!server->output || server->screen_on == on) {
 		return;
 	}
@@ -462,6 +468,8 @@ static void set_screen(struct starry_server *server, bool on) {
 	wlr_output_state_set_enabled(&state, on);
 	if (wlr_output_commit_state(server->output, &state)) {
 		server->screen_on = on;
+		wlr_log(WLR_INFO, "Screen %s", on ? "on" : "off");
+		system_screen(server, on);
 	}
 	wlr_output_state_finish(&state);
 }
@@ -470,9 +478,29 @@ static void keyboard_key(struct wl_listener *listener, void *data) {
 	struct starry_keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct wlr_keyboard_key_event *event = data;
 	struct starry_server *server = keyboard->server;
+	bool pressed = event->state == WL_KEYBOARD_KEY_STATE_PRESSED;
+	/* TV asleep: any key wakes it and goes no further, nor does its release. */
+	if (server->tv && server->wake_key_down && event->keycode == server->wake_key) {
+		server->wake_key_down = pressed;
+		return;
+	}
+	if (server->tv && !server->screen_on && server->output) {
+		if (pressed) {
+			server->wake_key = event->keycode;
+			server->wake_key_down = true;
+			starry_set_screen(server, true);
+		}
+		return;
+	}
+	/* On a TV with a shell that has a power menu, Power and Sleep are its. */
+	if (server->tv && (event->keycode == KEY_POWER || event->keycode == KEY_SLEEP) &&
+			system_takes_power_keys(server)) {
+		system_key(server, event->keycode, event->state);
+		return;
+	}
 	if (event->keycode == KEY_POWER) {
-		if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-			set_screen(server, !server->screen_on);
+		if (pressed) {
+			starry_set_screen(server, !server->screen_on);
 		}
 		return;
 	}
@@ -688,6 +716,7 @@ int main(int argc, char *argv[]) {
 	server.sigterm = wl_event_loop_add_signal(loop, SIGTERM, handle_terminate, &server);
 	server.sigint = wl_event_loop_add_signal(loop, SIGINT, handle_terminate, &server);
 	wl_event_loop_add_signal(loop, SIGUSR1, handle_switcher_signal, &server);
+	wl_event_loop_add_signal(loop, SIGUSR2, handle_wake_signal, &server);
 
 	const char *socket = wl_display_add_socket_auto(server.display);
 	if (!socket || !wlr_backend_start(server.backend)) {

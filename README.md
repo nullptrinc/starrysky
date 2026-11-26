@@ -135,6 +135,18 @@ echo STARRY_MODE=tv > /etc/default/starry
   or Home goes back, and holding OK (600 ms), Stop or 0 closes the chosen app.
   Over an app a single Home waits out those 380 ms before going home; on the
   home screen it acts at once.
+- Holding Home (700 ms) opens the control centre in the top right corner:
+  Sleep, the volume (left and right, or the volume keys; OK mutes), the
+  Siri Remote's battery from `/run/siri-remote`, and "Restart or Shut
+  Down…". Power or Sleep (`KEY_POWER`, `KEY_SLEEP`) opens the power menu:
+  Sleep, Restart, Shut Down; pressed again there, the box goes to sleep.
+- Sleep turns the panel off (`starry_system_v1.set_screen`, version 3) and
+  asks `lunar-settingsd` to put the TV in standby over HDMI-CEC; any key
+  wakes it (that key goes no further) and the TV is asked back (Image View
+  On, Active Source). `kill -USR2 $(pidof starry-compositor)` wakes it too,
+  from a shell. The volume, CEC and Restart/Shut Down go through
+  `lunar-settingsd`, which lets the `starry` user ask for `audio` and
+  `power` only.
 - No touch input in TV mode yet.
 
 ## Writing a plugin

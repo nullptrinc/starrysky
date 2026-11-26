@@ -225,6 +225,27 @@ struct starboard {
 	struct wl_callback *menu_frame;
 	uint32_t menu_frame_msec;
 	struct sb_timer menu_hold, menu_close_timer;
+
+	/* Home held opens the control centre (tvcontrol.c) */
+	bool tv_home_down, tv_home_eaten;
+	struct sb_timer tv_home_hold;
+
+	/* tvcontrol.c: the control centre and power menu, on the lock layer */
+	struct wl_surface *cc;
+	struct starry_layer_surface_v1 *cc_layer;
+	struct wp_viewport *cc_viewport;
+	struct canvas *cc_dim_control, *cc_dim_power, *cc_panel_canvas;
+	struct sb_sprite cc_panel;
+	bool cc_shown, cc_ok_down, cc_from_control;
+	enum { SB_CC_CONTROL, SB_CC_POWER } cc_page;
+	int cc_focus;
+	char cc_note[160]; /* "Restarting…" or an error, instead of the items */
+	struct sb_timer cc_poll, cc_note_timer;
+	bool asleep; /* the panel is off by our Sleep */
+	bool volume_known, volume_muted;
+	int volume;
+	bool remote_known, remote_connected, remote_charging;
+	int remote_battery; /* percent, -1 unknown */
 };
 
 /* main.c */
@@ -283,7 +304,7 @@ void tv_app_removing(struct starboard *sb, int index); /* before it leaves sb->a
 void tv_app_removed(struct starboard *sb, int index);  /* after */
 void tv_redraw_cards(struct starboard *sb);
 void tv_key(struct starboard *sb, uint32_t key, bool pressed);
-void tv_home_key(struct starboard *sb);
+void tv_home_key(struct starboard *sb, bool pressed);
 void tv_scenes_changed(struct starboard *sb);
 void tv_keyboard_left(struct starboard *sb);
 
@@ -293,6 +314,18 @@ void tv_menu_show(struct starboard *sb);
 void tv_menu_hide(struct starboard *sb);
 void tv_menu_key(struct starboard *sb, uint32_t key, bool pressed);
 void tv_menu_scene_closed(struct starboard *sb, struct sb_scene *scene);
+
+/* tvcontrol.c */
+void tv_control_create(struct starboard *sb);
+void tv_control_show(struct starboard *sb, bool power);
+void tv_control_hide(struct starboard *sb);
+void tv_control_key(struct starboard *sb, uint32_t key, bool pressed);
+void tv_control_audio_changed(struct starboard *sb, const struct cn_object *object, bool exists);
+void tv_power_key(struct starboard *sb, uint32_t key);
+void tv_sleep(struct starboard *sb);
+void tv_screen_changed(struct starboard *sb, bool on);
+/* One request to lunar-settingsd; true on "ok". reply may be NULL. */
+bool sb_settings(const char *request, char *reply, size_t size);
 
 /* battery.c */
 bool battery_load(const char *svg_path, const char *map_path);

@@ -237,13 +237,27 @@ static void system_switcher(void *data, struct starry_system_v1 *system, int32_t
 static void system_key(void *data, struct starry_system_v1 *system, uint32_t key,
 		uint32_t state) {
 	struct starboard *sb = data;
-	if (key != KEY_HOMEPAGE || state != WL_KEYBOARD_KEY_STATE_PRESSED) {
+	bool pressed = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+	if (sb->tv && (key == KEY_POWER || key == KEY_SLEEP)) {
+		if (pressed) {
+			tv_power_key(sb, key);
+		}
+		return;
+	}
+	if (key != KEY_HOMEPAGE) {
 		return;
 	}
 	if (sb->tv) {
-		tv_home_key(sb);
-	} else if (sb_foreground_scene(sb)) {
+		tv_home_key(sb, pressed);
+	} else if (pressed && sb_foreground_scene(sb)) {
 		starry_system_v1_go_home(sb->system);
+	}
+}
+
+static void system_screen(void *data, struct starry_system_v1 *system, uint32_t on) {
+	struct starboard *sb = data;
+	if (sb->tv) {
+		tv_screen_changed(sb, on != 0);
 	}
 }
 
@@ -252,6 +266,7 @@ static const struct starry_system_v1_listener system_listener = {
 	.scene = system_scene,
 	.switcher = system_switcher,
 	.key = system_key,
+	.screen = system_screen,
 };
 
 /* ---- launching (the FrontBoard part): reuse a live scene, else start the app ---- */
@@ -582,7 +597,7 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 		sb->viewporter = wl_registry_bind(registry, name, &wp_viewporter_interface, 1);
 	} else if (strcmp(interface, starry_system_v1_interface.name) == 0) {
 		sb->system = wl_registry_bind(registry, name, &starry_system_v1_interface,
-			version < 2 ? version : 2);
+			version < 3 ? version : 3);
 		starry_system_v1_add_listener(sb->system, &system_listener, sb);
 	}
 }
@@ -603,7 +618,7 @@ static const char *env_or(const char *name, const char *fallback) {
 static int next_timeout(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
 		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer,
-		&sb->closing_timer };
+		&sb->closing_timer, &sb->tv_home_hold, &sb->cc_poll, &sb->cc_note_timer };
 	uint32_t now = sb_now_msec();
 	int timeout = -1;
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
@@ -619,7 +634,7 @@ static int next_timeout(struct starboard *sb) {
 static void run_timers(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
 		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer,
-		&sb->closing_timer };
+		&sb->closing_timer, &sb->tv_home_hold, &sb->cc_poll, &sb->cc_note_timer };
 	uint32_t now = sb_now_msec();
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
 		if (timers[i]->deadline && (int32_t)(timers[i]->deadline - now) <= 0) {

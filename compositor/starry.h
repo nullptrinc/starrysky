@@ -52,6 +52,9 @@ struct starry_server {
 	struct wlr_scene_output *scene_output;
 	int width, height; /* logical */
 	bool screen_on;
+	/* TV: a key that woke the panel, swallowed up to its release */
+	uint32_t wake_key;
+	bool wake_key_down;
 	bool tv;           /* STARRY_MODE=tv: remote control, 1080p at 1x */
 	int scale;         /* output scale */
 	int status_height; /* apps start below the status bar */
@@ -98,6 +101,8 @@ void starry_go_home(struct starry_server *server, bool animated);
 /* Gives the keyboard to whoever should have it now: a modal shell surface,
  * else the foreground app, else the shell's home screen. */
 void starry_refocus(struct starry_server *server);
+/* Turns the panel off or on and tells the shell. */
+void starry_set_screen(struct starry_server *server, bool on);
 
 /* system.c */
 void system_init(struct starry_server *server);
@@ -115,5 +120,8 @@ struct wlr_surface *system_shell_surface(struct starry_server *server);
 bool system_shell_modal(struct starry_server *server);
 /* A key reserved for the shell (Home). */
 void system_key(struct starry_server *server, uint32_t key, uint32_t state);
+/* A shell is bound that takes Power and Sleep itself (version 3). */
+bool system_takes_power_keys(struct starry_server *server);
+void system_screen(struct starry_server *server, bool on);
 
 #endif

@@ -208,10 +208,16 @@ static void system_handle_go_home(struct wl_client *client, struct wl_resource *
 	starry_go_home(wl_resource_get_user_data(resource), true);
 }
 
+static void system_handle_set_screen(struct wl_client *client, struct wl_resource *resource,
+		uint32_t on) {
+	starry_set_screen(wl_resource_get_user_data(resource), on != 0);
+}
+
 static const struct starry_system_v1_interface system_impl = {
 	.destroy = system_handle_destroy,
 	.get_layer_surface = system_handle_get_layer_surface,
 	.go_home = system_handle_go_home,
+	.set_screen = system_handle_set_screen,
 };
 
 static void system_resource_destroy(struct wl_resource *resource) {
@@ -239,6 +245,18 @@ void system_key(struct starry_server *server, uint32_t key, uint32_t state) {
 		starry_system_v1_send_key(server->system, key, state);
 	} else if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		starry_go_home(server, true); /* no shell to ask */
+	}
+}
+
+bool system_takes_power_keys(struct starry_server *server) {
+	return server->system &&
+		wl_resource_get_version(server->system) >= STARRY_SYSTEM_V1_SCREEN_SINCE_VERSION;
+}
+
+void system_screen(struct starry_server *server, bool on) {
+	if (server->system &&
+			wl_resource_get_version(server->system) >= STARRY_SYSTEM_V1_SCREEN_SINCE_VERSION) {
+		starry_system_v1_send_screen(server->system, on);
 	}
 }
 
@@ -525,7 +543,7 @@ void system_init(struct starry_server *server) {
 	system_server = server;
 	wl_list_init(&server->layers);
 	server->system_global = wl_global_create(server->display, &starry_system_v1_interface,
-		2, server, system_bind);
+		3, server, system_bind);
 	wl_display_set_global_filter(server->display, global_filter, server);
 	server->respawn = wl_event_loop_add_timer(wl_display_get_event_loop(server->display),
 		respawn_starboard, server);
