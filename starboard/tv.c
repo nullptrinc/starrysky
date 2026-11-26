@@ -20,31 +20,19 @@
 #include "starry-system-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "starboard.h"
+#include "tv.h"
 
-#define MARGIN_X 96 /* overscan-safe area: 5% of 1920 */
-#define CARD_W 300
-#define CARD_H 180
-#define CARD_RADIUS 20
-#define CARD_GAP 44
-#define LIFT 1.1
-#define LIFTED_W 330 /* CARD_W * LIFT: the size cards are drawn at */
-#define LIFTED_H 198
 #define ROW_TOP 520
 #define ROW_PITCH 270 /* card, caption and air */
 #define CAPTION_W 640
 #define CAPTION_H 48
 #define CAPTION_SIZE 28
-#define BLUR 36 /* the lifted card's shadow */
-#define LEAN 8 /* px the focused card leans after a move */
 #define SHELF_Y 124
 #define SHELF_H 346
 #define POSTER_W 560
 #define POSTER_H 315
 #define SHELF_DELAY 140 /* msec the focus rests before the shelf redraws */
-#define REPEAT_MAX 10 /* focus moves per second while an arrow is held */
 #define BACKDROP 0xff0b0d12
-#define TEXT 0xfff2f4f8
-#define TEXT_SECONDARY 0xff9aa3b2
 
 /* ---- rows: favourites first, then the rest; one row when either is empty ---- */
 
@@ -160,11 +148,15 @@ static void draw_mark(struct starboard *sb, struct sb_app *app, struct canvas *c
 		0xffffffff, initial);
 }
 
-static void draw_card(struct starboard *sb, struct sb_app *app) {
+struct canvas *tv_card_art(struct starboard *sb, struct sb_app *app) {
 	struct canvas *canvas = canvas_create(sb->shm, LIFTED_W, LIFTED_H);
 	draw_face(canvas, 0, 0, LIFTED_W, LIFTED_H, CARD_RADIUS * LIFT, app->color);
 	draw_mark(sb, app, canvas, 0, 0, LIFTED_W, LIFTED_H, lround(LIFTED_H * 0.6));
-	app->icon_canvas = canvas;
+	return canvas;
+}
+
+static void draw_card(struct starboard *sb, struct sb_app *app) {
+	app->icon_canvas = tv_card_art(sb, app);
 }
 
 /* A soft shadow around a lifted card, as the material shader draws it. */
@@ -249,8 +241,8 @@ static void shelf_redraw(struct starboard *sb) {
 
 /* ---- motion: springs, advanced on frame callbacks of the home surface ---- */
 
-/* One damped spring, stepped semi-implicitly in 4 ms slices; false once at rest. */
-static bool spring(double *x, double *v, double target, double stiffness, double damping,
+/* Stepped semi-implicitly in 4 ms slices. */
+bool tv_spring(double *x, double *v, double target, double stiffness, double damping,
 		double dt) {
 	for (double t = 0; t < dt; t += 0.004) {
 		double h = fmin(0.004, dt - t);
@@ -313,11 +305,11 @@ static bool step(struct starboard *sb) {
 	sb->tv_frame_msec = msec;
 	bool moving = false;
 	for (int row = 0; row < 2; row++) {
-		moving |= spring(&sb->tv_scroll[row], &sb->tv_scroll_velocity[row],
+		moving |= tv_spring(&sb->tv_scroll[row], &sb->tv_scroll_velocity[row],
 			sb->tv_scroll_target[row], 170, 26, dt);
 	}
-	moving |= spring(&sb->tv_lean_x, &sb->tv_lean_vx, 0, 220, 13, dt);
-	moving |= spring(&sb->tv_lean_y, &sb->tv_lean_vy, 0, 220, 13, dt);
+	moving |= tv_spring(&sb->tv_lean_x, &sb->tv_lean_vx, 0, 220, 13, dt);
+	moving |= tv_spring(&sb->tv_lean_y, &sb->tv_lean_vy, 0, 220, 13, dt);
 	double follow = 1 - exp(-dt * 1000 / 70.0);
 	for (int i = 0; i < sb->app_count; i++) {
 		struct sb_app *app = &sb->apps[i];
@@ -331,9 +323,8 @@ static bool step(struct starboard *sb) {
 			app->y += (y - app->y) * follow;
 			moving = true;
 		}
-		/* Slightly underdamped: the lift overshoots by about 9% of itself. */
-		moving |= spring(&app->focus, &app->focus_velocity, i == sb->tv_focus ? 1 : 0,
-			260, 19.4, dt);
+		moving |= tv_spring(&app->focus, &app->focus_velocity, i == sb->tv_focus ? 1 : 0,
+			LIFT_STIFFNESS, LIFT_DAMPING, dt);
 		place_card(sb, i);
 	}
 	place_focus_art(sb);
