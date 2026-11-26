@@ -30,7 +30,7 @@ struct starry_layer {
 	struct wlr_surface *surface;
 	struct wlr_scene_tree *tree;
 	enum starry_system_v1_layer layer;
-	struct wl_listener surface_destroy, surface_map;
+	struct wl_listener surface_destroy, surface_map, surface_unmap;
 };
 
 /* ---- layer surfaces ---- */
@@ -52,6 +52,7 @@ static void layer_detach(struct starry_layer *layer) {
 	if (layer->surface) {
 		wl_list_remove(&layer->surface_destroy.link);
 		wl_list_remove(&layer->surface_map.link);
+		wl_list_remove(&layer->surface_unmap.link);
 		wlr_surface_unmap(layer->surface);
 		layer->surface = NULL;
 	}
@@ -65,14 +66,25 @@ static void layer_surface_destroyed(struct wl_listener *listener, void *data) {
 	struct starry_layer *layer = wl_container_of(listener, layer, surface_destroy);
 	wl_list_remove(&layer->surface_destroy.link);
 	wl_list_remove(&layer->surface_map.link);
+	wl_list_remove(&layer->surface_unmap.link);
 	layer->surface = NULL;
 	layer->tree = NULL; /* the subsurface tree destroys itself with the surface */
 }
 
-/* A (re)started shell's home screen takes the keys while no app is shown. */
+/* A (re)started shell's home screen takes the keys while no app is shown;
+ * a lock or switcher surface takes them while it is mapped, then hands them
+ * back. */
 static void layer_surface_mapped(struct wl_listener *listener, void *data) {
 	struct starry_layer *layer = wl_container_of(listener, layer, surface_map);
-	if (layer->layer == STARRY_SYSTEM_V1_LAYER_HOME || layer->layer == STARRY_SYSTEM_V1_LAYER_LOCK) {
+	if (layer->layer != STARRY_SYSTEM_V1_LAYER_OVERLAY) {
+		starry_refocus(layer->server);
+	}
+}
+
+static void layer_surface_unmapped(struct wl_listener *listener, void *data) {
+	struct starry_layer *layer = wl_container_of(listener, layer, surface_unmap);
+	if (layer->layer == STARRY_SYSTEM_V1_LAYER_LOCK ||
+			layer->layer == STARRY_SYSTEM_V1_LAYER_SWITCHER) {
 		starry_refocus(layer->server);
 	}
 }
@@ -126,20 +138,32 @@ bool system_lock_mapped(struct starry_server *server) {
 	return false;
 }
 
-struct wlr_surface *system_shell_surface(struct starry_server *server) {
-	struct starry_layer *layer, *home = NULL;
+/* The mapped shell surface of a layer, or NULL. */
+static struct wlr_surface *mapped_layer(struct starry_server *server, uint32_t which) {
+	struct starry_layer *layer;
 	wl_list_for_each(layer, &server->layers, link) {
-		if (!layer->surface || !layer->surface->mapped) {
-			continue;
-		}
-		if (layer->layer == STARRY_SYSTEM_V1_LAYER_LOCK) {
+		if (layer->layer == which && layer->surface && layer->surface->mapped) {
 			return layer->surface;
 		}
-		if (layer->layer == STARRY_SYSTEM_V1_LAYER_HOME) {
-			home = layer;
+	}
+	return NULL;
+}
+
+struct wlr_surface *system_shell_surface(struct starry_server *server) {
+	const uint32_t order[] = { STARRY_SYSTEM_V1_LAYER_LOCK, STARRY_SYSTEM_V1_LAYER_SWITCHER,
+		STARRY_SYSTEM_V1_LAYER_HOME };
+	for (size_t i = 0; i < sizeof(order) / sizeof(order[0]); i++) {
+		struct wlr_surface *surface = mapped_layer(server, order[i]);
+		if (surface) {
+			return surface;
 		}
 	}
-	return home ? home->surface : NULL;
+	return NULL;
+}
+
+bool system_shell_modal(struct starry_server *server) {
+	return mapped_layer(server, STARRY_SYSTEM_V1_LAYER_LOCK) ||
+		mapped_layer(server, STARRY_SYSTEM_V1_LAYER_SWITCHER);
 }
 
 /* ---- starry_system_v1 ---- */
@@ -175,6 +199,8 @@ static void system_handle_get_layer_surface(struct wl_client *client,
 	wl_signal_add(&surface->events.destroy, &layer->surface_destroy);
 	layer->surface_map.notify = layer_surface_mapped;
 	wl_signal_add(&surface->events.map, &layer->surface_map);
+	layer->surface_unmap.notify = layer_surface_unmapped;
+	wl_signal_add(&surface->events.unmap, &layer->surface_unmap);
 	wl_list_insert(&server->layers, &layer->link);
 }
 

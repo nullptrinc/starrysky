@@ -19,7 +19,7 @@
       <entry name="home" value="0" summary="below applications: wallpaper and icons"/>
       <entry name="overlay" value="1" summary="above applications: status bar, indicators"/>
       <entry name="lock" value="2" summary="above everything; takes all input while mapped"/>
-      <entry name="switcher" value="3" summary="above applications, below scene views: app switcher backdrop"/>
+      <entry name="switcher" value="3" summary="above applications, below scene views: app switcher; takes the keyboard while mapped"/>
     </enum>
 
     <enum name="error">
@@ -77,9 +77,12 @@
         here, whatever has the keyboard focus. Without a bound shell the
         compositor goes home by itself.
 
-        All other keys follow the keyboard focus: the foreground
-        application, or the shell's home layer surface (the lock layer while
-        it is mapped) when no application is in the foreground.
+        All other keys follow the keyboard focus: a mapped lock layer
+        surface, else a mapped switcher layer surface (even over a
+        foreground application, which stays visible below it), else the
+        foreground application, else the shell's home layer surface. When a
+        lock or switcher surface unmaps, the focus returns to whichever of
+        these comes next.
       </description>
       <arg name="key" type="uint" summary="Linux evdev key code"/>
       <arg name="state" type="uint" summary="as wl_keyboard.key_state: 1 pressed, 0 released"/>

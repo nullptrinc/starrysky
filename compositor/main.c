@@ -83,11 +83,12 @@ static void animation_step(struct starry_server *server) {
 /* ---- foreground application ---- */
 
 /* Keys go to the foreground app, or to the shell's home screen without one
- * (remote controls navigate it); the Home key is the shell's alone. */
+ * (remote controls navigate it), and to a lock or switcher surface over
+ * either; the Home key is the shell's alone. */
 static void set_keyboard_focus(struct starry_server *server, struct starry_toplevel *toplevel) {
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
-	struct wlr_surface *surface = toplevel ? toplevel->xdg_toplevel->base->surface :
-		system_shell_surface(server);
+	struct wlr_surface *surface = toplevel && !system_shell_modal(server) ?
+		toplevel->xdg_toplevel->base->surface : system_shell_surface(server);
 	if (toplevel) {
 		wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
 	}
@@ -101,10 +102,12 @@ static void set_keyboard_focus(struct starry_server *server, struct starry_tople
 	}
 }
 
+static void app_hidden(struct starry_server *server);
+
 void starry_refocus(struct starry_server *server) {
-	if (!server->active) {
-		set_keyboard_focus(server, NULL);
-	}
+	/* An app sliding away on its way home has already lost the keys. */
+	bool leaving = server->animation.active && server->animation.done == app_hidden;
+	set_keyboard_focus(server, leaving ? NULL : server->active);
 }
 
 static void home_hidden(struct starry_server *server) {

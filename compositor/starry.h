@@ -95,7 +95,8 @@ struct starry_toplevel {
 uint32_t starry_now_msec(void);
 void starry_show_app(struct starry_server *server, struct starry_toplevel *toplevel, bool slide);
 void starry_go_home(struct starry_server *server, bool animated);
-/* Gives the keyboard to the shell when no app is in the foreground. */
+/* Gives the keyboard to whoever should have it now: a modal shell surface,
+ * else the foreground app, else the shell's home screen. */
 void starry_refocus(struct starry_server *server);
 
 /* system.c */
@@ -110,6 +111,8 @@ bool system_lock_mapped(struct starry_server *server);
 void system_switcher(struct starry_server *server, int y);
 /* The shell surface that takes keys while no app is in the foreground. */
 struct wlr_surface *system_shell_surface(struct starry_server *server);
+/* A lock or switcher surface is mapped: it takes the keys even over an app. */
+bool system_shell_modal(struct starry_server *server);
 /* A key reserved for the shell (Home). */
 void system_key(struct starry_server *server, uint32_t key, uint32_t state);
 
