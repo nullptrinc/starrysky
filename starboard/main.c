@@ -152,6 +152,8 @@ static void adopt_scene(struct starboard *sb, struct sb_scene *scene) {
 		}
 		if (!app->pid && match) {
 			app->pid = scene->pid;
+			app->launched_msec = 0;
+			app->had_window = true;
 			sb_log("Adopted %s window of %d", app->name, scene->pid);
 			return;
 		}
@@ -164,8 +166,11 @@ static void scene_info(void *data, struct starry_scene_v1 *object, int32_t pid,
 	bool known = scene->pid == pid;
 	scene->pid = pid;
 	snprintf(scene->app_id, sizeof(scene->app_id), "%s", app_id);
-	for (int i = 0; i < scene->sb->app_count && !known; i++) {
-		known = scene->sb->apps[i].pid == pid;
+	for (int i = 0; i < scene->sb->app_count; i++) {
+		if (pid && scene->sb->apps[i].pid == pid) {
+			scene->sb->apps[i].had_window = true;
+			known = true;
+		}
 	}
 	if (!known) {
 		adopt_scene(scene->sb, scene);
@@ -291,6 +296,62 @@ static pid_t launch_through_daemon(const char *verb, const char *argument) {
 	return -1;
 }
 
+/* Ends an app process: through starry-launchd, which started it under its
+ * own uid (SIGTERM, then SIGKILL), or ourselves in a development run. */
+static void stop_process(pid_t pid) {
+	char argument[16];
+	snprintf(argument, sizeof(argument), "%d", (int)pid);
+	if (launch_through_daemon("stop", argument) == 0) {
+		kill(-pid, SIGKILL); /* our own child, in a session of its own */
+		kill(pid, SIGKILL);
+	}
+	sb_log("Stopped %d: alive without a window", (int)pid);
+}
+
+static bool process_alive(pid_t pid) {
+	/* Another uid's process answers EPERM: alive all the same. */
+	return pid > 0 && (kill(pid, 0) == 0 || errno != ESRCH);
+}
+
+static bool has_scene(struct starboard *sb, pid_t pid) {
+	struct sb_scene *scene;
+	wl_list_for_each(scene, &sb->scenes, link) {
+		if (scene->pid == pid) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void check_closing(struct starboard *sb) {
+	uint32_t now = sb_now_msec(), next = 0;
+	for (int i = sb->closing_count - 1; i >= 0; i--) {
+		struct sb_closing *entry = &sb->closing[i];
+		if ((int32_t)(entry->due - now) > 0) {
+			uint32_t wait = entry->due - now;
+			next = !next || wait < next ? wait : next;
+			continue;
+		}
+		/* A window still there means the app chose to stay: leave it. */
+		if (!has_scene(sb, entry->pid) && process_alive(entry->pid)) {
+			stop_process(entry->pid);
+		}
+		*entry = sb->closing[--sb->closing_count];
+	}
+	sb_timer_arm(&sb->closing_timer, next);
+}
+
+void sb_watch_close(struct starboard *sb, struct sb_scene *scene) {
+	if (!scene || scene->pid <= 0 || sb->closing_count >= SB_MAX_CARDS) {
+		return;
+	}
+	sb->closing_timer.callback = check_closing;
+	sb->closing[sb->closing_count++] = (struct sb_closing){
+		.pid = scene->pid, .due = sb_now_msec() + SB_CLOSE_GRACE_MSEC,
+	};
+	check_closing(sb);
+}
+
 void sb_launch(struct starboard *sb, int index) {
 	struct sb_app *app = &sb->apps[index];
 	struct sb_scene *scene = sb_scene_for_app(sb, app);
@@ -300,7 +361,15 @@ void sb_launch(struct starboard *sb, int index) {
 	}
 	/* An adopted app's process is not our child, so no SIGCHLD tells us it
 	 * died; check before waiting for a window that will never come. */
-	if (app->pid && kill(app->pid, 0) != 0 && errno == ESRCH) {
+	if (app->pid && !process_alive(app->pid)) {
+		app->pid = 0;
+	}
+	/* Alive without a window: once it has lost its window, or when none came
+	 * in time, it is stuck. Stop it and start afresh rather than do nothing. */
+	if (app->pid && (app->had_window ||
+			sb_now_msec() - app->launched_msec > SB_START_GRACE_MSEC)) {
+		sb_log("%s (%d) has no window; restarting it", app->name, (int)app->pid);
+		stop_process(app->pid);
 		app->pid = 0;
 	}
 	if (app->pid) {
@@ -324,6 +393,8 @@ void sb_launch(struct starboard *sb, int index) {
 	}
 	if (pid > 0) {
 		app->pid = pid;
+		app->launched_msec = sb_now_msec();
+		app->had_window = false;
 		sb_log("Launched %s as %d", app->name, pid);
 	}
 }
@@ -531,7 +602,8 @@ static const char *env_or(const char *name, const char *fallback) {
 
 static int next_timeout(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
-		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer };
+		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer,
+		&sb->closing_timer };
 	uint32_t now = sb_now_msec();
 	int timeout = -1;
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
@@ -546,7 +618,8 @@ static int next_timeout(struct starboard *sb) {
 
 static void run_timers(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
-		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer };
+		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer,
+		&sb->closing_timer };
 	uint32_t now = sb_now_msec();
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
 		if (timers[i]->deadline && (int32_t)(timers[i]->deadline - now) <= 0) {

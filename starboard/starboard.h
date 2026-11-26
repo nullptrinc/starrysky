@@ -16,6 +16,8 @@
 #define SB_MAX_TOUCH 10
 #define SB_MAX_STATUS_ITEMS 16
 #define SB_MAX_CARDS 16
+#define SB_CLOSE_GRACE_MSEC 3000 /* after a close request, a lingering process is stopped */
+#define SB_START_GRACE_MSEC 10000 /* a launched app without a window by then is stuck */
 
 struct canvas;
 struct cn_client;
@@ -53,6 +55,8 @@ struct sb_app {
 	int image_width, image_height;
 	char image_path[192];
 	pid_t pid;
+	uint32_t launched_msec; /* when we started it; 0 if adopted */
+	bool had_window; /* a window of this pid has been seen */
 	struct sb_sprite icon, label;
 	struct canvas *icon_canvas, *lifted_canvas, *label_canvas;
 	double x, y; /* current position; eases towards the slot */
@@ -182,6 +186,10 @@ struct starboard {
 	uint32_t switcher_frame_msec;
 
 	struct wl_list scenes;
+	/* Apps asked to close, checked again after a grace period. */
+	struct sb_closing { pid_t pid; uint32_t due; } closing[SB_MAX_CARDS];
+	int closing_count;
+	struct sb_timer closing_timer;
 
 	/* tv.c: STARRY_MODE=tv, a remote instead of a finger */
 	bool tv;
@@ -232,6 +240,9 @@ void sb_sprite_destroy(struct sb_sprite *sprite);
 const char *sb_app_name_for_pid(struct starboard *sb, pid_t pid);
 void sb_launch(struct starboard *sb, int index);
 struct sb_scene *sb_scene_for_app(struct starboard *sb, const struct sb_app *app);
+/* A window of this scene was asked to close: should its process linger
+ * without a window, it is stopped after a grace period. */
+void sb_watch_close(struct starboard *sb, struct sb_scene *scene);
 
 /* home.c */
 void home_load_apps(struct starboard *sb, const char *catalog, const char *layout);

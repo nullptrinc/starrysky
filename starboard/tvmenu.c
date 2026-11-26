@@ -377,6 +377,7 @@ static void close_chosen(struct starboard *sb) {
 	struct sb_menu_card *card = &sb->menu_cards[index];
 	if (card->scene) {
 		starry_scene_v1_close(card->scene->scene);
+		sb_watch_close(sb, card->scene);
 	}
 	card->closing = true;
 	int next = neighbour(sb, index, 1);

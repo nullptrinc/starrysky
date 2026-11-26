@@ -356,6 +356,7 @@ void switcher_touch_up(struct starboard *sb, struct sb_touch *point, uint32_t ti
 			card->closing = true;
 			if (card->scene) {
 				starry_scene_v1_close(card->scene->scene);
+				sb_watch_close(sb, card->scene);
 			}
 		}
 		card->lift = 0;
