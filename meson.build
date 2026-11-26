@@ -74,7 +74,7 @@ nanosvg = static_library('nanosvg', 'starboard/nanosvg.c',
 
 executable('starboard',
   'starboard/main.c', 'starboard/home.c', 'starboard/status.c', 'starboard/switcher.c',
-  'starboard/canvas.c', 'starboard/battery.c', 'starboard/icons.c', 'starboard/tv.c',
+  'starboard/canvas.c', 'starboard/battery.c', 'starboard/icons.c', 'starboard/tv.c', 'starboard/tvmenu.c',
   protocol_code, protocol_client, viewporter_code, viewporter_client,
   link_with: nanosvg,
   include_directories: plugin_include,

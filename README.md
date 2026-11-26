@@ -129,7 +129,13 @@ echo STARRY_MODE=tv > /etc/default/starry
   focus.
 - `starry-launchd` passes `STARRY_MODE` to apps, so Stardust apps pick the
   TV variant of `Theme`.
-- There is no app switcher and no touch input in TV mode yet.
+- Home twice (within 380 ms) opens the app menu over the screen: a row of
+  the running apps (the compositor's scenes, most recent first), with the
+  open app left visible under a dim. Left and right choose, OK switches, Back
+  or Home goes back, and holding OK (600 ms), Stop or 0 closes the chosen app.
+  Over an app a single Home waits out those 380 ms before going home; on the
+  home screen it acts at once.
+- No touch input in TV mode yet.
 
 ## Writing a plugin
 

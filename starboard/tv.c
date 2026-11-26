@@ -33,6 +33,7 @@
 #define POSTER_H 315
 #define SHELF_DELAY 140 /* msec the focus rests before the shelf redraws */
 #define BACKDROP 0xff0b0d12
+#define DOUBLE_HOME 380 /* msec between the two presses of Home for the app menu */
 
 /* ---- rows: favourites first, then the rest; one row when either is empty ---- */
 
@@ -466,6 +467,10 @@ static void stop_repeat(struct starboard *sb) {
 }
 
 void tv_key(struct starboard *sb, uint32_t key, bool pressed) {
+	if (sb->menu_shown) {
+		tv_menu_key(sb, key, pressed);
+		return;
+	}
 	int dx = key == KEY_LEFT ? -1 : key == KEY_RIGHT ? 1 : 0;
 	int dy = key == KEY_UP ? -1 : key == KEY_DOWN ? 1 : 0;
 	if (dx || dy) {
@@ -503,12 +508,10 @@ void tv_keyboard_left(struct starboard *sb) {
 	stop_repeat(sb);
 }
 
-/* Home from an app comes back with that app in focus; on the home screen
- * it goes back to the start, as Back does. */
-void tv_home_key(struct starboard *sb) {
+/* Home from an app comes back with that app in focus. */
+static void home_from_app(struct starboard *sb) {
 	struct sb_scene *scene = sb_foreground_scene(sb);
 	if (!scene) {
-		focus_first(sb);
 		return;
 	}
 	for (int i = 0; i < sb->app_count; i++) {
@@ -517,6 +520,32 @@ void tv_home_key(struct starboard *sb) {
 		}
 	}
 	starry_system_v1_go_home(sb->system);
+}
+
+/* Home twice within DOUBLE_HOME opens the app menu over the screen, Home
+ * closes it again. A single press acts at once on the home screen (back to
+ * the start, as Back does: harmless if a second press follows); over an
+ * app it waits out the window, so the app stays under the menu if a second
+ * press comes. */
+void tv_home_key(struct starboard *sb) {
+	if (sb->menu_shown) {
+		tv_menu_hide(sb);
+		return;
+	}
+	uint32_t now = sb_now_msec();
+	bool second = sb->tv_home_timer.deadline ||
+		(sb->tv_home_msec && now - sb->tv_home_msec < DOUBLE_HOME);
+	sb_timer_arm(&sb->tv_home_timer, 0);
+	sb->tv_home_msec = 0;
+	if (second) {
+		stop_repeat(sb);
+		tv_menu_show(sb);
+	} else if (sb_foreground_scene(sb)) {
+		sb_timer_arm(&sb->tv_home_timer, DOUBLE_HOME);
+	} else {
+		sb->tv_home_msec = now;
+		focus_first(sb);
+	}
 }
 
 void tv_scenes_changed(struct starboard *sb) {
@@ -605,6 +634,7 @@ void tv_create(struct starboard *sb) {
 	sb->tv_shelf_timer.callback = shelf_redraw;
 	sb->tv_repeat_rate = 25;
 	sb->tv_repeat_delay = 400;
+	sb->tv_home_timer.callback = home_from_app;
 
 	/* A one-pixel backdrop, stretched by the compositor to the screen. */
 	sb->home = sb_surface_create(sb, false);
@@ -633,4 +663,5 @@ void tv_create(struct starboard *sb) {
 	wl_surface_damage_buffer(sb->home, 0, 0, 1, 1);
 	focus_first(sb);
 	schedule(sb);
+	tv_menu_create(sb);
 }

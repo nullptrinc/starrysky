@@ -189,6 +189,9 @@ static void scene_closed(void *data, struct starry_scene_v1 *object) {
 	struct sb_scene *scene = data;
 	struct starboard *sb = scene->sb;
 	switcher_scene_closed(sb, scene);
+	if (sb->tv) {
+		tv_menu_scene_closed(sb, scene);
+	}
 	wl_list_remove(&scene->link);
 	starry_scene_v1_destroy(object);
 	free(scene);
@@ -528,7 +531,7 @@ static const char *env_or(const char *name, const char *fallback) {
 
 static int next_timeout(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
-		&sb->tv_shelf_timer };
+		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer };
 	uint32_t now = sb_now_msec();
 	int timeout = -1;
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
@@ -543,7 +546,7 @@ static int next_timeout(struct starboard *sb) {
 
 static void run_timers(struct starboard *sb) {
 	struct sb_timer *timers[] = { &sb->long_press, &sb->status_tick, &sb->tv_repeat,
-		&sb->tv_shelf_timer };
+		&sb->tv_shelf_timer, &sb->tv_home_timer, &sb->menu_hold, &sb->menu_close_timer };
 	uint32_t now = sb_now_msec();
 	for (size_t i = 0; i < sizeof(timers) / sizeof(timers[0]); i++) {
 		if (timers[i]->deadline && (int32_t)(timers[i]->deadline - now) <= 0) {

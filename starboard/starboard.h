@@ -81,6 +81,19 @@ struct sb_card {
 	bool closing;
 };
 
+/* A running app in the TV app menu (tvmenu.c). */
+struct sb_menu_card {
+	struct sb_scene *scene; /* NULL once the window is gone */
+	struct starry_scene_view_v1 *view; /* for a live preview; NULL for now */
+	struct sb_sprite art, label;
+	struct wp_viewport *viewport;
+	struct canvas *art_canvas, *label_canvas;
+	double x; /* left edge at rest, eased towards its slot */
+	double focus, focus_velocity; /* the lift, 0..1 */
+	double lift, lift_velocity; /* vertical offset as a closing card flies away */
+	bool closing;
+};
+
 struct sb_touch {
 	bool down;
 	double start_x, start_y, x, y;
@@ -187,6 +200,23 @@ struct starboard {
 	struct sb_timer tv_repeat, tv_shelf_timer;
 	uint32_t tv_repeat_key;
 	int tv_repeat_rate, tv_repeat_delay;
+	/* Home twice opens the app menu: a single press waits this long over an app */
+	struct sb_timer tv_home_timer;
+	uint32_t tv_home_msec; /* the last single press on the home screen */
+
+	/* tvmenu.c: the TV app menu, on the switcher layer */
+	struct wl_surface *menu;
+	struct starry_layer_surface_v1 *menu_layer;
+	struct wp_viewport *menu_viewport, *menu_shadow_viewport, *menu_sheen_viewport;
+	struct canvas *menu_scrim, *menu_message_canvas;
+	struct sb_sprite menu_shadow, menu_sheen, menu_message;
+	bool menu_shown, menu_ok_down;
+	struct sb_menu_card menu_cards[SB_MAX_CARDS];
+	int menu_count, menu_selected;
+	double menu_scroll, menu_scroll_velocity, menu_scroll_target;
+	struct wl_callback *menu_frame;
+	uint32_t menu_frame_msec;
+	struct sb_timer menu_hold, menu_close_timer;
 };
 
 /* main.c */
@@ -245,6 +275,13 @@ void tv_key(struct starboard *sb, uint32_t key, bool pressed);
 void tv_home_key(struct starboard *sb);
 void tv_scenes_changed(struct starboard *sb);
 void tv_keyboard_left(struct starboard *sb);
+
+/* tvmenu.c */
+void tv_menu_create(struct starboard *sb);
+void tv_menu_show(struct starboard *sb);
+void tv_menu_hide(struct starboard *sb);
+void tv_menu_key(struct starboard *sb, uint32_t key, bool pressed);
+void tv_menu_scene_closed(struct starboard *sb, struct sb_scene *scene);
 
 /* battery.c */
 bool battery_load(const char *svg_path, const char *map_path);
