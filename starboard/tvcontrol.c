@@ -22,9 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/un.h>
 #include <unistd.h>
 #include "canvas.h"
 #include "constellation.h"
@@ -33,7 +31,6 @@
 #include "starboard.h"
 #include "tv.h"
 
-#define SETTINGS_SOCKET "/run/lunar-settings.sock"
 #define REMOTE_STATE "/run/siri-remote"
 #define PANEL_W 560
 #define PANEL_PAD 28
@@ -79,46 +76,25 @@ static const enum item *items(struct starboard *sb, int *count) {
 	return control_items;
 }
 
-/* ---- lunar-settingsd: one request per connection ---- */
+/* ---- lunar-settingsd: one Constellation request each ---- */
 
 bool sb_settings(const char *request, char *reply, size_t size) {
-	int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-	struct sockaddr_un address = { .sun_family = AF_UNIX };
-	snprintf(address.sun_path, sizeof(address.sun_path), "%s", SETTINGS_SOCKET);
-	if (reply && size) {
-		snprintf(reply, size, "err no lunar-settingsd");
-	}
-	if (fd < 0 || connect(fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-		if (fd >= 0) {
-			close(fd);
-		}
-		sb_log("lunar-settingsd: cannot connect for \"%s\"", request);
-		return false;
-	}
+	char answer[256];
 	/* CEC retries to a TV that does not answer take about a second. */
-	struct timeval timeout = { .tv_sec = 3 };
-	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-	char answer[256] = "";
-	ssize_t received = -1;
-	size_t length = strlen(request);
-	if (send(fd, request, length, MSG_NOSIGNAL) == (ssize_t)length) {
-		received = recv(fd, answer, sizeof(answer) - 1, 0);
+	int result = cn_ask("settings", request, 3000, answer, sizeof(answer));
+	if (result < 0) {
+		char reason[32];
+		snprintf(reason, sizeof(reason), "%.31s", answer);
+		snprintf(answer, sizeof(answer), "err %s", reason);
 	}
-	close(fd);
-	if (received <= 0) {
-		snprintf(answer, sizeof(answer), "err no answer");
-	} else {
-		answer[received] = 0;
-		answer[strcspn(answer, "\n")] = 0;
-	}
+	answer[strcspn(answer, "\n")] = 0;
 	if (reply && size) {
 		snprintf(reply, size, "%s", answer);
 	}
-	bool ok = strncmp(answer, "ok", 2) == 0;
-	if (!ok) {
+	if (result != 1) {
 		sb_log("lunar-settingsd: \"%s\": %s", request, answer);
 	}
-	return ok;
+	return result == 1;
 }
 
 /* ---- state: the remote from siri-remoted, the volume from Constellation ---- */

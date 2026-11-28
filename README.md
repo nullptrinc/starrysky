@@ -145,8 +145,8 @@ echo STARRY_MODE=tv > /etc/default/starry
   wakes it (that key goes no further) and the TV is asked back (Image View
   On, Active Source). `kill -USR2 $(pidof starry-compositor)` wakes it too,
   from a shell. The volume, CEC and Restart/Shut Down go through
-  `lunar-settingsd`, which lets the `starry` user ask for `audio` and
-  `power` only.
+  `lunar-settingsd` as Constellation requests (`cn_ask`), and it lets the
+  `starry` user ask for `audio` and `power` only.
 - No touch input in TV mode yet.
 
 ## Writing a plugin
